@@ -101,6 +101,10 @@ public final class DisplaySession {
         var pingTimer: DispatchSourceTimer?
         let pingClock = PingClock()                 // media queue only
         let reassembler = Reassembler()             // decode queue only
+        private let rttLock = NSLock()
+        private var rttValue: Double?
+        /// Smoothed RTT from `PingClock`; written on the media queue, read on the decode queue.
+        var rttMs: Double? { rttLock.lock(); defer { rttLock.unlock() }; return rttValue }
         var wantsKeyframe = true                    // decode queue only
         var highestDecoded: UInt32 = 0              // decode queue only
         var framesDropped: UInt32 = 0               // decode queue only
@@ -220,7 +224,7 @@ public final class DisplaySession {
             dt.schedule(deadline: .now(), repeating: .milliseconds(5))
             dt.setEventHandler { [weak self] in
                 guard let self = self, !self.closed else { return }
-                self.process(self.reassembler.tick(nowMicros: MonoClock.nowMicros(), rttMs: nil))
+                self.process(self.reassembler.tick(nowMicros: MonoClock.nowMicros(), rttMs: self.rttMs))
             }
             decodeTimer = dt
             dt.resume()
@@ -252,9 +256,8 @@ public final class DisplaySession {
                 guard let frag = try? VideoFragment.decode(payload) else { return }
                 decodeQueue.async { [weak self] in
                     guard let self = self, !self.closed else { return }
-                    // rttMs nil: NACK is not served until T3.2, so losses go straight to keyframe recovery.
                     self.process(self.reassembler.ingest(type: type, fragment: frag,
-                                                         nowMicros: MonoClock.nowMicros(), rttMs: nil))
+                                                         nowMicros: MonoClock.nowMicros(), rttMs: self.rttMs))
                 }
             case .ping:
                 if let p = try? PingPacket.decode(payload) {
@@ -265,6 +268,8 @@ public final class DisplaySession {
             case .pong:
                 if let p = try? PongPacket.decode(payload) {
                     pingClock.handlePong(p, nowMicros: MonoClock.nowMicros())
+                    let r = pingClock.rttMs
+                    rttLock.lock(); rttValue = r; rttLock.unlock()
                 }
             default:
                 break
@@ -292,22 +297,25 @@ public final class DisplaySession {
                     sendFeedback()
                 case .frameLost:
                     framesDropped &+= 1
-                case .nack:
-                    break
+                case .nack(let n):
+                    media?.send(.nack, n.encode())
                 }
             }
         }
 
         func sendFeedback() {
             let c = reassembler.counters
+            // Loss comes from the media packet counter gaps (pre-FEC, all H->D packets), not from
+            // Reassembler.fragsLostEstimate, which over-counts when FEC is on.
+            let mc = media?.counters ?? MediaCounters()
             statLock.lock()
             let decoded = framesDecoded
             let ms = decodeMsMean
             statLock.unlock()
             let fb = FeedbackPacket(highestDecodedFrame: highestDecoded, framesDecoded: decoded,
                                     framesDropped: framesDropped,
-                                    fragsReceived: UInt32(truncatingIfNeeded: c.fragsReceived),
-                                    fragsLost: UInt32(truncatingIfNeeded: c.fragsLostEstimate),
+                                    fragsReceived: UInt32(truncatingIfNeeded: mc.packetsReceived),
+                                    fragsLost: UInt32(truncatingIfNeeded: mc.packetsLost),
                                     fragsRecovered: UInt32(truncatingIfNeeded: c.fragsRecovered),
                                     avgDecodeMs: ms, jitterMs: 0,
                                     requestKeyframe: wantsKeyframe || reassembler.awaitingKeyframe)

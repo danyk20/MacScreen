@@ -75,6 +75,7 @@ public final class HostSession {
     private var recoveryTimer: DispatchSourceTimer?
     private var pingTimer: DispatchSourceTimer?
     private let pingClock = PingClock()     // media queue only
+    private let history = PacketHistory()
     private var ended = false
     private var peerByeReason: String?
 
@@ -323,6 +324,7 @@ public final class HostSession {
                                                 isKeyframe: f.isKeyframe,
                                                 captureTimeMicros: f.captureTimeMicros,
                                                 fecRatio: config.fecRatio)
+            history.record(frameId: id, fragments: frags, nowMicros: MonoClock.nowMicros())
             m.sendBatch(frags.map { ($0.type, $0.fragment.encode()) }, paceOverMicros: 4000)
         } catch {
             Self.log.error("fragment failed: \(String(describing: error), privacy: .public)")
@@ -351,8 +353,13 @@ public final class HostSession {
             }
         case .feedback:
             if let fb = try? FeedbackPacket.decode(payload) { handleFeedback(fb) }
+        case .nack:
+            if let n = try? NackPacket.decode(payload) {
+                let items = history.retransmissions(for: n, nowMicros: MonoClock.nowMicros())
+                if !items.isEmpty { media?.sendBatch(items, paceOverMicros: 0) }
+            }
         default:
-            break   // NACK handling arrives with T3.2
+            break
         }
     }
 
@@ -412,6 +419,7 @@ public final class HostSession {
         lastBuffer = nil
         streamLock.unlock()
         media?.close(); media = nil
+        history.removeAll()
         let src = source
         source = nil
         let enc = encoder

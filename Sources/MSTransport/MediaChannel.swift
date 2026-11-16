@@ -15,6 +15,8 @@ public struct MediaCounters: Equatable {
     public var authFailures: UInt64 = 0
     public var replays: UInt64 = 0
     public var sendErrors: UInt64 = 0
+    /// Packets missing from the receive counter sequence (gaps), minus late arrivals. Pre-FEC network loss.
+    public var packetsLost: UInt64 = 0
     public init() {}
 }
 
@@ -80,6 +82,7 @@ private final class MediaCore {
     private var timerResumed = false
 
     private var lastDropLog: UInt64 = 0
+    private var highestCounter: UInt64 = 0   // queue only
 
     init(sealKey: SymmetricKey, openKey: SymmetricKey, queue: DispatchQueue) {
         sealer = PacketSealer(key: sealKey)
@@ -220,7 +223,16 @@ private final class MediaCore {
         do {
             let r = try opener.open(datagram)
             guard let type = PacketType(rawValue: r.type) else { return }
-            bump { $0.packetsReceived += 1; $0.bytesReceived += UInt64(datagram.count) }
+            let counter = r.counter
+            let advance: UInt64 = counter > highestCounter ? counter - highestCounter - 1 : 0
+            if counter > highestCounter { highestCounter = counter }
+            let late = counter < highestCounter
+            bump {
+                $0.packetsReceived += 1
+                $0.bytesReceived += UInt64(datagram.count)
+                $0.packetsLost += advance
+                if late, $0.packetsLost > 0 { $0.packetsLost -= 1 }
+            }
             onAuthenticated?(conn)
             onPacket?(type, r.payload)
         } catch CipherError.replayed {
