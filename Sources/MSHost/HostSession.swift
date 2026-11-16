@@ -364,7 +364,8 @@ public final class HostSession {
         streamLock.lock(); currentFec = rc.fecRatio; streamLock.unlock()
         let bitrate = rc.initialBitrate
         do {
-            encoder = try VideoEncoder(format: f, bitrate: bitrate) { [weak self] frame in
+            encoder = try VideoEncoder(format: f, bitrate: bitrate,
+                                   colour: ColourPlan(panelIsP3: caps.wideColor)) { [weak self] frame in
                 self?.encodeQueue.async { self?.sendFrame(frame) }
             }
         } catch {

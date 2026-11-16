@@ -15,6 +15,10 @@ enum LocalCapabilities {
                 if s.width > 0, s.height > 0 { mm = s }
             }
         }
+        var wide = false
+        if !windowed || role == .host, let cs = NSScreen.main?.colorSpace?.cgColorSpace {
+            wide = cs.name == CGColorSpace.displayP3 || (cs.isWideGamutRGB && cs.name != CGColorSpace.sRGB)
+        }
         let hevcDec = CodecCapabilities.hardwareDecodeSupported(.hevc)
         let h264Dec = CodecCapabilities.hardwareDecodeSupported(.h264)
         return CapabilitiesMessage(
@@ -23,6 +27,6 @@ enum LocalCapabilities {
             panelPixelWidth: w, panelPixelHeight: h, panelWidthMM: Double(mm.width), panelHeightMM: Double(mm.height),
             backingScale: scale, edrHeadroom: 1, refreshHz: 60,
             hwDecodeH264: h264Dec, hwDecodeHEVC: hevcDec, hwEncodeH264: true, hwEncodeHEVC: true,
-            wideColor: false)
+            wideColor: wide)
     }
 }

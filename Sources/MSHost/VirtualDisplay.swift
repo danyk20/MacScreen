@@ -2,6 +2,7 @@ import CPrivateAPI
 import CoreGraphics
 import CryptoKit
 import Foundation
+import MSCodec
 import MSCore
 import os
 
@@ -13,9 +14,10 @@ public struct VirtualDisplayConfig: Equatable {
     public var refreshRate: Double
     public var sizeMM: CGSize
     public var serial: UInt32
+    public var colour: ColourPlan
 
     public init(name: String, pixelWidth: Int, pixelHeight: Int, hiDPI: Bool,
-                refreshRate: Double, sizeMM: CGSize, serial: UInt32) {
+                refreshRate: Double, sizeMM: CGSize, serial: UInt32, colour: ColourPlan = .srgb) {
         self.name = name
         self.pixelWidth = pixelWidth
         self.pixelHeight = pixelHeight
@@ -23,6 +25,7 @@ public struct VirtualDisplayConfig: Equatable {
         self.refreshRate = refreshRate
         self.sizeMM = sizeMM
         self.serial = serial
+        self.colour = colour
     }
 }
 
@@ -109,10 +112,10 @@ public final class VirtualDisplay {
         desc.productID = MSConstants.productID
         desc.serialNum = c.serial
         desc.queue = DispatchQueue.main
-        desc.redPrimary = CGPoint(x: 0.64, y: 0.33)
-        desc.greenPrimary = CGPoint(x: 0.30, y: 0.60)
-        desc.bluePrimary = CGPoint(x: 0.15, y: 0.06)
-        desc.whitePoint = CGPoint(x: 0.3127, y: 0.3290)
+        desc.redPrimary = c.colour.redPrimary
+        desc.greenPrimary = c.colour.greenPrimary
+        desc.bluePrimary = c.colour.bluePrimary
+        desc.whitePoint = c.colour.whitePoint
         desc.terminationHandler = { _, _ in
             DispatchQueue.main.async { box.owner?.handleTerminated() }
         }

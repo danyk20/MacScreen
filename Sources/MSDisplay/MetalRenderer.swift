@@ -3,6 +3,7 @@ import Metal
 import QuartzCore
 import CoreVideo
 import os
+import MSCodec
 import MSCore
 
 public enum RendererError: Error {
@@ -78,10 +79,10 @@ public final class MetalRenderer {
 
     // MARK: Layer
 
-    public func attach(layer: CAMetalLayer, drawableSize: CGSize, tenBit: Bool = false) {
+    public func attach(layer: CAMetalLayer, drawableSize: CGSize, tenBit: Bool = false, colour: ColourPlan = .srgb) {
         layer.device = device
         layer.pixelFormat = tenBit ? .bgr10a2Unorm : .bgra8Unorm
-        layer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+        layer.colorspace = CGColorSpace(name: colour.layerColourSpaceName)
         layer.displaySyncEnabled = true
         layer.maximumDrawableCount = 2
         layer.framebufferOnly = true

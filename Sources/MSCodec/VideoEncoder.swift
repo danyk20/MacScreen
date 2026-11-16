@@ -46,12 +46,14 @@ public final class VideoEncoder {
     private static let log = Log.logger("codec")
 
     private let format: VideoFormat
+    private let colour: ColourPlan
     private let shared: EncoderShared
     private let sessionLock = NSLock()
     private var session: VTCompressionSession?
     public private(set) var usesLowLatencyRateControl: Bool = false
 
-    public init(format: VideoFormat, bitrate: Int, output: @escaping (EncodedFrame) -> Void) throws {
+    public init(format: VideoFormat, bitrate: Int, colour: ColourPlan = .srgb,
+                output: @escaping (EncodedFrame) -> Void) throws {
         guard format.bitDepth == 8 || format.bitDepth == 10 else {
             throw CodecError.unsupportedFormat("bit depth \(format.bitDepth)")
         }
@@ -62,6 +64,7 @@ public final class VideoEncoder {
             throw CodecError.unsupportedFormat("invalid dimensions or fps")
         }
         self.format = format
+        self.colour = colour
         self.shared = EncoderShared(codec: format.codec, output: output)
 
         let pixelFormat: OSType = format.bitDepth == 10
@@ -139,9 +142,9 @@ public final class VideoEncoder {
         setProperty(s, kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: format.fps))
         setProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, NSNumber(value: 36000))
         setProperty(s, kVTCompressionPropertyKey_MaxFrameDelayCount, NSNumber(value: 0))
-        setProperty(s, kVTCompressionPropertyKey_ColorPrimaries, kCMFormatDescriptionColorPrimaries_ITU_R_709_2)
-        setProperty(s, kVTCompressionPropertyKey_TransferFunction, kCMFormatDescriptionTransferFunction_ITU_R_709_2)
-        setProperty(s, kVTCompressionPropertyKey_YCbCrMatrix, kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2)
+        setProperty(s, kVTCompressionPropertyKey_ColorPrimaries, colour.vuiPrimaries)
+        setProperty(s, kVTCompressionPropertyKey_TransferFunction, colour.vuiTransfer)
+        setProperty(s, kVTCompressionPropertyKey_YCbCrMatrix, colour.vuiMatrix)
         if #available(macOS 13.0, *) {
             setProperty(s, kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality, kCFBooleanTrue)
         }

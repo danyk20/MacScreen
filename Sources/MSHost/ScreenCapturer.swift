@@ -3,6 +3,7 @@ import CoreMedia
 import CoreVideo
 import Dispatch
 import Foundation
+import MSCodec
 import MSCore
 import ScreenCaptureKit
 
@@ -47,15 +48,17 @@ public final class ScreenCapturer: NSObject {
         public var fps: Int
         public var showsCursor: Bool
         public var tenBit: Bool
+        public var colour: ColourPlan
 
         public init(displayID: CGDirectDisplayID, pixelWidth: Int, pixelHeight: Int, fps: Int,
-                    showsCursor: Bool, tenBit: Bool = false) {
+                    showsCursor: Bool, tenBit: Bool = false, colour: ColourPlan = .srgb) {
             self.displayID = displayID
             self.pixelWidth = pixelWidth
             self.pixelHeight = pixelHeight
             self.fps = fps
             self.showsCursor = showsCursor
             self.tenBit = tenBit
+            self.colour = colour
         }
     }
 
@@ -191,7 +194,7 @@ public final class ScreenCapturer: NSObject {
         sc.pixelFormat = c.tenBit
             ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
             : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
-        sc.colorSpaceName = CGColorSpace.sRGB
+        sc.colorSpaceName = c.colour.captureColourSpaceName
         sc.colorMatrix = CGDisplayStream.yCbCrMatrix_ITU_R_709_2
         sc.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(1, c.fps)))
         sc.queueDepth = 3

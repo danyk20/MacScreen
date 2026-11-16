@@ -1,5 +1,6 @@
 import AppKit
 import MSCore
+import MSCodec
 import MSDisplay
 import MSProtocol
 
@@ -54,7 +55,8 @@ final class DisplayController {
         latencyCSVPath = latencyCSV
         window = DisplayWindow(windowed: windowed)
         renderer = try MetalRenderer()
-        renderer.attach(layer: window.metalLayer, drawableSize: window.drawablePixelSize)
+        renderer.attach(layer: window.metalLayer, drawableSize: window.drawablePixelSize,
+                        colour: ColourPlan(panelIsP3: caps.wideColor))
         window.onResize = { [renderer] size in renderer.updateDrawableSize(size) }
         let rs = RendererSink(renderer: renderer, window: window)
         rs.onAskAllow = { host, done in

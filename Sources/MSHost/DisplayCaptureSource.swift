@@ -28,11 +28,12 @@ public final class DisplayCaptureSource: CursorAwareSource {
 
     public func start(format: VideoFormat, hiDPI: Bool, display: CapabilitiesMessage,
                       onFrame: @escaping (CVPixelBuffer, UInt64) -> Void) async throws {
+        let colour = ColourPlan(panelIsP3: display.wideColor)
         let serial = VirtualDisplay.serial(forDeviceId: peer.deviceId)  // stable per Display: macOS restores arrangement
         let cfg = VirtualDisplayConfig(
             name: peer.deviceName, pixelWidth: format.width, pixelHeight: format.height, hiDPI: hiDPI,
             refreshRate: 60, sizeMM: CGSize(width: display.panelWidthMM, height: display.panelHeightMM),
-            serial: serial)
+            serial: serial, colour: colour)
         let boxedCfg = Box(value: cfg)
         let vdBox: Box<VirtualDisplay> = try await withCheckedThrowingContinuation { cont in
             DispatchQueue.main.async {
@@ -47,7 +48,7 @@ public final class DisplayCaptureSource: CursorAwareSource {
         let cap = ScreenCapturer(
             config: ScreenCapturer.Config(displayID: vd.displayID, pixelWidth: format.width,
                                           pixelHeight: format.height, fps: format.fps,
-                                          showsCursor: showsCursor, tenBit: format.bitDepth == 10),
+                                          showsCursor: showsCursor, tenBit: format.bitDepth == 10, colour: colour),
             onFrame: onFrame)
         capturer = cap
         try await cap.start()
