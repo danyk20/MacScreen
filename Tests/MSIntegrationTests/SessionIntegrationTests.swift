@@ -212,6 +212,27 @@ final class SessionIntegrationTests: XCTestCase {
         wait("second end") { sink.ended.get() == 2 }
     }
 
+    func testNewHostSessionAfterStopAcceptedWithoutPairing() throws {
+        let hostStore = try makeStore("Host")
+        let sink = TestSink()
+        let (display, endpoint) = try startDisplay(try makeStore("Display"), sink: sink)
+        defer { display.stop() }
+        let h1 = host(hostStore, TestPatternSource())
+        sink.onCode = { h1.submitPairingCode($0) }
+        h1.connect(to: endpoint)
+        wait("first streaming") { h1.state == .streaming && sink.frames.get() >= 10 }
+        h1.stop()
+        wait("display idle") { sink.ended.get() == 1 }
+        let before = sink.frames.get()
+        let h2 = host(hostStore, TestPatternSource())
+        h2.connect(to: endpoint)
+        wait("second streaming") { h2.state == .streaming && sink.frames.get() >= before + 10 }
+        XCTAssertEqual(sink.codesShown.get(), 1)
+        XCTAssertEqual(sink.started.get(), 2)
+        h2.stop()
+        wait("second end") { sink.ended.get() == 2 }
+    }
+
     func testWrongCodeAborts() throws {
         let sink = TestSink()
         let (display, endpoint) = try startDisplay(try makeStore("Display"), sink: sink)

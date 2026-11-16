@@ -119,20 +119,43 @@ public final class HostSession {
         queue.async { [self] in
             guard state == .idle else { return }
             setState(.connecting)
-            let conn = NWConnection(to: endpoint, using: ControlChannel.tcpParameters())
-            let store = self.store
-            let ch = ControlChannel(connection: conn, role: .host, identity: store.identity,
-                                    isKnownPeer: { store.isKnown(identityKey: $0) }, queue: queue)
-            ch.onSecured = { [weak self] r in self?.handleSecured(r) }
-            ch.onMessage = { [weak self] m in self?.handleMessage(m) }
-            ch.onPeerBye = { [weak self] reason in self?.peerByeReason = reason }
-            ch.onClosed = { [weak self] reason in
-                guard let self = self else { return }
-                if let b = self.peerByeReason { self.finish(.peerBye(b)) } else { self.finish(.closed(reason)) }
+            let q = queue
+            Task { [weak self] in
+                let planner = ConnectPlanner()
+                let won = await planner.run(shouldContinue: { [weak self] in self?.isConnectingNow ?? false }) { a in
+                    await ConnectPlanner.connectNW(to: endpoint, queue: q, attempt: a)
+                }
+                self?.queue.async { [weak self] in
+                    guard let self = self else { won?.result.cancel(); return }
+                    guard self.state == .connecting, !self.ended else { won?.result.cancel(); return }
+                    guard let conn = won?.result else {
+                        self.finish(.closed(.network("could not connect")))
+                        return
+                    }
+                    self.startChannel(conn)
+                }
             }
-            channel = ch
-            ch.start()
         }
+    }
+
+    private var isConnectingNow: Bool {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return stateValue == .connecting
+    }
+
+    private func startChannel(_ conn: NWConnection) {
+        let store = self.store
+        let ch = ControlChannel(connection: conn, role: .host, identity: store.identity,
+                                isKnownPeer: { store.isKnown(identityKey: $0) }, queue: queue)
+        ch.onSecured = { [weak self] r in self?.handleSecured(r) }
+        ch.onMessage = { [weak self] m in self?.handleMessage(m) }
+        ch.onPeerBye = { [weak self] reason in self?.peerByeReason = reason }
+        ch.onClosed = { [weak self] reason in
+            guard let self = self else { return }
+            if let b = self.peerByeReason { self.finish(.peerBye(b)) } else { self.finish(.closed(reason)) }
+        }
+        channel = ch
+        ch.start()
     }
 
     public func submitPairingCode(_ code: String) {

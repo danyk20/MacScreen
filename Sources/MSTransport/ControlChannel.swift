@@ -115,7 +115,12 @@ public final class ControlChannel {
         connection.stateUpdateHandler = { [weak self] state in
             self?.handleState(state)
         }
-        connection.start(queue: queue)
+        if connection.state == .setup {
+            connection.start(queue: queue)
+        } else {
+            // Already started (and ready) by `ConnectPlanner`.
+            handleState(connection.state)
+        }
     }
 
     private func handleState(_ state: NWConnection.State) {

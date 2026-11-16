@@ -19,6 +19,8 @@ final class HostController: NSObject {
     /// Substring from `--connect`; consumed on first match so auto-connect never retries.
     private var pendingAutoConnect: String?
     private let cursorMode: String
+    private var policy = ReconnectPolicy()
+    private var reconnectGeneration = 0
     var onChange: (() -> Void)?
 
     init(store: IdentityStore, caps: CapabilitiesMessage, stats: Bool, autoConnect: String? = nil,
@@ -33,6 +35,7 @@ final class HostController: NSObject {
                 // Do not offer ourselves (windowed loopback uses a distinct id, so this only matters for shared stores).
                 self?.displays = list.filter { $0.id != store.identity.deviceId }
                 self?.tryAutoConnect()
+                self?.evaluateReconnect()
                 self?.onChange?()
             }
         }
@@ -79,6 +82,7 @@ final class HostController: NSObject {
 
     @objc private func connect(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String, let d = displays.first(where: { $0.id == id }) else { return }
+        policy.userConnect(id: d.id)
         connect(to: d)
     }
 
@@ -87,6 +91,7 @@ final class HostController: NSObject {
         guard let needle = pendingAutoConnect, session == nil else { return }
         guard let d = displays.first(where: { $0.name.localizedCaseInsensitiveContains(needle) }) else { return }
         pendingAutoConnect = nil
+        policy.userConnect(id: d.id)
         connect(to: d)
     }
 
@@ -117,7 +122,29 @@ final class HostController: NSObject {
     }
 
     @objc private func disconnect() {
+        policy.userDisconnect()
+        reconnectGeneration += 1
         session?.stop()
+    }
+
+    private func now() -> Double { Double(MonoClock.nowMicros()) / 1_000_000 }
+
+    /// Reconnects when the Display is seen again and the backoff has elapsed; otherwise schedules a re-check.
+    private func evaluateReconnect() {
+        guard session == nil, let wait = policy.waitTime(now: now()) else { return }
+        guard let id = policy.targetId, displays.contains(where: { $0.id == id }) else { return }
+        if policy.shouldReconnect(seenIds: displays.map { $0.id }, now: now()),
+           let d = displays.first(where: { $0.id == id }) {
+            policy.reconnectStarted()
+            connect(to: d)
+        } else {
+            reconnectGeneration += 1
+            let gen = reconnectGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait + 0.05) { [weak self] in
+                guard let self = self, gen == self.reconnectGeneration else { return }
+                self.evaluateReconnect()
+            }
+        }
     }
 
     private func askForCode(_ s: HostSession, displayName: String) {
@@ -136,11 +163,16 @@ final class HostController: NSObject {
         case .awaitingPairingCode: update("Waiting for pairing code")
         case .awaitingPairingApproval: update("Waiting for \(name) to allow this Mac")
         case .negotiating: update("Negotiating with \(name)")
-        case .streaming: update("Streaming to \(name)")
+        case .streaming:
+            policy.sessionStreaming()
+            update("Streaming to \(name)")
         case .ended(let why):
             session = nil
             connectedTo = nil
-            update("Disconnected")
+            policy.sessionEnded(why, now: now())
+            let willRetry = policy.enabled
+            update(willRetry ? "Reconnecting\u{2026}" : "Disconnected")
+            if willRetry { evaluateReconnect() }
             let msg: String?
             switch why {
             case .stopped: msg = nil
@@ -150,7 +182,7 @@ final class HostController: NSObject {
             case .failure(let r): msg = "Failed: \(r)"
             case .closed(let r): msg = "Connection closed: \(r)"
             }
-            if let m = msg { _ = Dialogs.alert("MacScreen", m) }
+            if let m = msg, !willRetry { _ = Dialogs.alert("MacScreen", m) }
         }
     }
 
