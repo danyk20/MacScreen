@@ -71,6 +71,16 @@ final class HandshakeTests: XCTestCase {
         XCTAssertTrue(r2.dispRes.peerWasKnown)
     }
 
+    func testPeerKnowsUs() throws {
+        let host = ident("Host Mac"), disp = ident("iMac")
+        let a = try run(host: host, disp: disp, dispKnows: true)
+        XCTAssertEqual(a.hostRes.peerKnowsUs, true)
+        XCTAssertNil(a.dispRes.peerKnowsUs)
+        let b = try run(host: host, disp: disp, dispKnows: false)
+        XCTAssertEqual(b.hostRes.peerKnowsUs, false)
+        XCTAssertNil(b.dispRes.peerKnowsUs)
+    }
+
     func testDeterministicVector() throws {
         let host = ident("H"), disp = ident("D")
         let a = try run(host: host, disp: disp, hr: fixedRandom(1), dr: fixedRandom(100))

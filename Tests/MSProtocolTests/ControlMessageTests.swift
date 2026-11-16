@@ -12,6 +12,7 @@ final class ControlMessageTests: XCTestCase {
                                               ephKey: d, nonce: d, knowsPeer: true))),
             (3, .reveal(RevealMessage(ephKey: d, nonce: d, signature: d))),
             (4, .revealReply(RevealReplyMessage(signature: d))),
+            (9, .pairRequest(PairRequestMessage())),
             (10, .pairConfirm(PairConfirmMessage())),
             (11, .pairResult(PairResultMessage(accepted: true))),
             (12, .capabilities(CapabilitiesMessage(role: "display", deviceName: "iMac", osVersion: "12.7",

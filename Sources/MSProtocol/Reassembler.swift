@@ -126,6 +126,20 @@ public final class Reassembler {
         return events
     }
 
+    /// Call when the decoder rejects a frame: drops non-keyframes in assembly and waits for a keyframe.
+    /// `nextFrameId` is unchanged. Re-requests are repeated by `tick`.
+    public func forceKeyframeResync(nowMicros: UInt64) -> [Event] {
+        for (key, f) in frames where !f.isKeyframe { frames[key] = nil }
+        absentNack = nil
+        let interval = UInt64(MSConstants.feedbackIntervalMs) * 1000
+        if awaitingKeyframe, let last = lastKeyframeRequestMicros, nowMicros >= last, nowMicros - last < interval {
+            return []
+        }
+        awaitingKeyframe = true
+        lastKeyframeRequestMicros = nowMicros
+        return [.requestKeyframe]
+    }
+
     // MARK: Fragment intake
 
     private func accept(type: PacketType, fragment f: VideoFragment, now: UInt64, events: inout [Event]) {

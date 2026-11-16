@@ -143,7 +143,7 @@ public final class HostHandshake {
         pending = HandshakeResult(keys: keys, peerIdentityKey: r.identityKey, peerDeviceId: r.deviceId,
                                   peerDeviceName: r.deviceName, transcript: t,
                                   pairingCode: HandshakeCrypto.pairingCode(transcript: t),
-                                  peerWasKnown: isKnownPeer(r.identityKey))
+                                  peerWasKnown: isKnownPeer(r.identityKey), peerKnowsUs: r.knowsPeer)
         peerSigningKey = peerId
         state = .revealSent
         return RevealMessage(ephKey: eph.publicKey.rawRepresentation, nonce: nonce, signature: sig)

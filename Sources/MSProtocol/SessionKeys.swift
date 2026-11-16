@@ -23,9 +23,11 @@ public struct HandshakeResult {
     public let transcript: Data
     public let pairingCode: String
     public let peerWasKnown: Bool
+    /// Host side only: whether the Display already knew us (helloReply.knowsPeer). Nil on the Display side.
+    public let peerKnowsUs: Bool?
 
     public init(keys: SessionKeys, peerIdentityKey: Data, peerDeviceId: String, peerDeviceName: String,
-                transcript: Data, pairingCode: String, peerWasKnown: Bool) {
+                transcript: Data, pairingCode: String, peerWasKnown: Bool, peerKnowsUs: Bool? = nil) {
         self.keys = keys
         self.peerIdentityKey = peerIdentityKey
         self.peerDeviceId = peerDeviceId
@@ -33,6 +35,7 @@ public struct HandshakeResult {
         self.transcript = transcript
         self.pairingCode = pairingCode
         self.peerWasKnown = peerWasKnown
+        self.peerKnowsUs = peerKnowsUs
     }
 }
 

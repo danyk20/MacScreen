@@ -192,6 +192,30 @@ final class ReassemblerTests: XCTestCase {
         XCTAssertEqual(r.counters.fragsLostEstimate, 2)
     }
 
+    func testForceKeyframeResync() throws {
+        let r = try primed()
+        for id in UInt32(1)...2 { feed(r, try make(id, size: 500, key: false).1, at: UInt64(id) * 16 * ms) }
+        XCTAssertEqual(r.forceKeyframeResync(nowMicros: 50 * ms), [.requestKeyframe])
+        XCTAssertTrue(r.awaitingKeyframe)
+        // Repeated call within the interval is silent.
+        XCTAssertEqual(r.forceKeyframeResync(nowMicros: 60 * ms), [])
+        // Non-keyframes are not delivered.
+        let ev = feed(r, try make(3, size: 500, key: false).1, at: 70 * ms)
+        XCTAssertTrue(frameEvents(ev).isEmpty)
+        XCTAssertEqual(r.tick(nowMicros: 100 * ms, rttMs: nil), [])
+        XCTAssertEqual(r.tick(nowMicros: 150 * ms, rttMs: nil), [.requestKeyframe])
+        XCTAssertEqual(r.tick(nowMicros: 200 * ms, rttMs: nil), [])
+        XCTAssertEqual(r.tick(nowMicros: 250 * ms, rttMs: nil), [.requestKeyframe])
+        // Keyframe resumes delivery.
+        let (pk, fk) = try make(10, size: 800, key: true)
+        let got = frameEvents(feed(r, fk, at: 260 * ms))
+        XCTAssertEqual(got.map { $0.id }, [10])
+        XCTAssertEqual(got.first?.payload, pk)
+        XCTAssertFalse(r.awaitingKeyframe)
+        let (p11, f11) = try make(11, size: 500, key: false)
+        XCTAssertEqual(frameEvents(feed(r, f11, at: 270 * ms)).map { $0.payload }, [p11])
+    }
+
     // MARK: NACK
 
     func testNackThenRetransmission() throws {

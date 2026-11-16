@@ -38,6 +38,14 @@ public final class ControlChannel {
         set { securedLock.lock(); securedFlag = newValue; securedLock.unlock() }
     }
 
+    private let remoteHostLock = NSLock()
+    private var remoteHostValue: NWEndpoint.Host?
+    /// Peer address, set when the connection becomes ready.
+    public var remoteHost: NWEndpoint.Host? {
+        remoteHostLock.lock(); defer { remoteHostLock.unlock() }
+        return remoteHostValue
+    }
+
     private var started = false
     private var closed = false
     private var framer = ControlFramer()
@@ -111,6 +119,11 @@ public final class ControlChannel {
         guard !closed else { return }
         switch state {
         case .ready:
+            var endpoint = connection.currentPath?.remoteEndpoint
+            if case .hostPort = endpoint {} else { endpoint = connection.endpoint }
+            if case let .hostPort(host, _)? = endpoint {
+                remoteHostLock.lock(); remoteHostValue = host; remoteHostLock.unlock()
+            }
             if role == .host {
                 let hh = HostHandshake(identity: identity, isKnownPeer: isKnownPeer)
                 hostHandshake = hh

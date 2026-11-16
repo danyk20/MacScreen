@@ -275,7 +275,9 @@ Handshake (plaintext JSON, types 1–4):
   both signatures are Ed25519 over `T`.
 - Keys: `HKDF-SHA256(ikm: X25519 shared secret, salt: T, info: label, 32 bytes)` with labels
   `ctl-h2d`, `ctl-d2h`, `med-h2d`, `med-d2h`.
-- Pairing, when either side does not know the other's identity key: code =
+- Pairing, when either side does not know the other's identity key (the Host learns the
+  Display's view from `helloReply.knowsPeer`; the Host then sends `pairRequest`, which makes the
+  Display show the code): code =
   `u32(first 4 bytes of SHA256("SAS" ‖ T)) mod 1 000 000`, shown as 6 digits full-screen on
   the Display. The user types it on the Host; the Host compares with its own value. On
   match the Host stores the Display key and sends `pairConfirm`; the Display then asks
@@ -285,7 +287,8 @@ Handshake (plaintext JSON, types 1–4):
   `~/Library/Application Support/MacScreen/identity.json`, file mode 0600.
 
 Encrypted messages: `capabilities` (both; Display includes panel pixel size, physical
-size in mm, scale, EDR headroom, hardware decoders), `probeBlob` (binary), `probeResult`,
+size in mm, scale, EDR headroom, hardware decoders), `pairRequest`, `pairConfirm`, `pairResult`,
+`probeBlob` (binary), `probeResult`,
 `linkProbeStart`, `linkProbeResult`, `sessionRequest` {VideoFormat, cursorMode, audio},
 `sessionAccept` {udpPort}, `reconfigure` {VideoFormat}, `cursorImage` {id, png, hotX, hotY,
 widthPt, heightPt}, `hostState` {displayAsleep, mirroring}, `keepalive`, `bye` {reason}.

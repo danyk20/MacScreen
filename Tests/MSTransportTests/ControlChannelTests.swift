@@ -114,6 +114,8 @@ final class ControlChannelTests: XCTestCase {
         XCTAssertEqual(d.peerIdentityKey, p.hostId.publicKey)
         XCTAssertTrue(p.host.isSecured)
         XCTAssertTrue(p.display.isSecured)
+        XCTAssertNotNil(p.host.remoteHost)
+        XCTAssertNotNil(p.display.remoteHost)
     }
 
     private func messages() -> [ControlMessage] {
@@ -121,6 +123,7 @@ final class ControlChannelTests: XCTestCase {
         var blob = Data(count: 2 << 20)
         for i in stride(from: 0, to: blob.count, by: 997) { blob[i] = UInt8(truncatingIfNeeded: i) }
         return [
+            .pairRequest(PairRequestMessage()),
             .pairConfirm(PairConfirmMessage()),
             .pairResult(PairResultMessage(accepted: true)),
             .capabilities(CapabilitiesMessage(role: "display", deviceName: "iMac", osVersion: "12.7",

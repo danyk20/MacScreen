@@ -77,6 +77,11 @@ public struct PairResultMessage: Codable, Equatable {
     public init(accepted: Bool) { self.accepted = accepted }
 }
 
+/// Display to Host: asks the Host to start pairing.
+public struct PairRequestMessage: Codable, Equatable {
+    public init() {}
+}
+
 /// Opaque BenchResult JSON.
 public struct ProbeResultMessage: Codable, Equatable {
     public var json: Data
@@ -178,6 +183,7 @@ public enum ControlMessage: Equatable {
     case helloReply(HelloReplyMessage)
     case reveal(RevealMessage)
     case revealReply(RevealReplyMessage)
+    case pairRequest(PairRequestMessage)
     case pairConfirm(PairConfirmMessage)
     case pairResult(PairResultMessage)
     case capabilities(CapabilitiesMessage)
@@ -199,6 +205,7 @@ public enum ControlMessage: Equatable {
         case .helloReply: return 2
         case .reveal: return 3
         case .revealReply: return 4
+        case .pairRequest: return 9
         case .pairConfirm: return 10
         case .pairResult: return 11
         case .capabilities: return 12
@@ -226,6 +233,7 @@ public enum ControlMessage: Equatable {
         case .helloReply(let m): return try enc.encode(m)
         case .reveal(let m): return try enc.encode(m)
         case .revealReply(let m): return try enc.encode(m)
+        case .pairRequest(let m): return try enc.encode(m)
         case .pairConfirm(let m): return try enc.encode(m)
         case .pairResult(let m): return try enc.encode(m)
         case .capabilities(let m): return try enc.encode(m)
@@ -255,6 +263,7 @@ public enum ControlMessage: Equatable {
         case 2: return .helloReply(try json(HelloReplyMessage.self))
         case 3: return .reveal(try json(RevealMessage.self))
         case 4: return .revealReply(try json(RevealReplyMessage.self))
+        case 9: return .pairRequest(try json(PairRequestMessage.self))
         case 10: return .pairConfirm(try json(PairConfirmMessage.self))
         case 11: return .pairResult(try json(PairResultMessage.self))
         case 12: return .capabilities(try json(CapabilitiesMessage.self))
