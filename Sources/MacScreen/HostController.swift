@@ -47,6 +47,15 @@ final class HostController: NSObject {
         if !ScreenCapturePermission.isGranted { _ = ScreenCapturePermission.request() }
     }
 
+    func setStatsOverlay(_ on: Bool) {
+        if on {
+            if overlay == nil { overlay = StatsOverlay { [weak self] in self?.statsText() ?? "" } }
+            overlay?.show()
+        } else {
+            overlay?.hide()
+        }
+    }
+
     func stop() {
         session?.stop()
         browser.stop()
@@ -104,8 +113,8 @@ final class HostController: NSObject {
             Dialogs.screenRecordingGuidance()
             return
         }
-        var cfg = HostSessionConfig()
-        cfg.cursorMode = cursorMode
+        var cfg = HostSessionConfig(settings: AppSettings.load())
+        if cursorMode == "overlay" { cfg.cursorMode = "overlay" }  // `--cursor overlay` wins over the stored setting
         let s = HostSession(identityStore: store, capabilities: caps, config: cfg) { peer in
             DisplayCaptureSource(peer: peer, showsCursor: true)
         }

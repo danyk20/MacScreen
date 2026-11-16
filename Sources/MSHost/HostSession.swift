@@ -34,8 +34,42 @@ public struct HostSessionConfig {
     /// Test hook: replaces the system cursor sampler in overlay mode.
     public var makeCursorSampler: ((CursorAwareSource) -> CursorSampling)?
     public var chooseFormat: (CapabilitiesMessage) -> VideoFormat = HostSessionConfig.defaultFormat
+    /// Upper bound for the profile bitrate in bit/s (AppSettings bitrate cap); nil = automatic.
+    public var maxBitrate: Int?
 
     public init() {}
+
+    /// Config from stored settings; the format choice respects the Display's capabilities.
+    public init(settings: AppSettings) {
+        cursorMode = settings.cursorMode
+        if settings.bitrateCapMbps > 0 { maxBitrate = settings.bitrateCapMbps * 1_000_000 }
+        chooseFormat = { HostSessionConfig.format(for: $0, settings: settings) }
+    }
+
+    /// Closest supported format to the settings, never above what the Display advertises.
+    public static func format(for c: CapabilitiesMessage, settings: AppSettings) -> VideoFormat {
+        // Codec: preferred if both ends support it in hardware, else the other, else the default rule.
+        let hevcOK = c.hwDecodeHEVC && c.hwEncodeHEVC
+        let h264OK = c.hwDecodeH264 && c.hwEncodeH264
+        var codec: Codec = settings.codec == "h264" ? .h264 : .hevc
+        if codec == .hevc && !hevcOK { codec = .h264 } else if codec == .h264 && !h264OK && hevcOK { codec = .hevc }
+        // Resolution: panel size, optionally reduced to maxHeight keeping aspect; even dimensions.
+        var w = max(2, c.panelPixelWidth), h = max(2, c.panelPixelHeight)
+        if settings.maxHeight > 0 && settings.maxHeight < h {
+            w = Int((Double(w) * Double(settings.maxHeight) / Double(h)).rounded())
+            h = settings.maxHeight
+        }
+        // No H.264 above 4096x2304.
+        if codec == .h264 && (w > 4096 || h > 2304) {
+            let k = min(4096.0 / Double(w), 2304.0 / Double(h))
+            w = Int(Double(w) * k); h = Int(Double(h) * k)
+        }
+        w = max(2, w & ~1); h = max(2, h & ~1)
+        // Frame rate: largest option not above the preference or the Display refresh rate.
+        let limit = min(settings.fps, Int(c.refreshHz.rounded()))
+        let fps = AppSettings.fpsOptions.filter { $0 <= limit }.max() ?? AppSettings.fpsOptions[0]
+        return VideoFormat(codec: codec, width: w, height: h, fps: fps, bitDepth: 8)
+    }
 
     public static func defaultFormat(_ c: CapabilitiesMessage) -> VideoFormat {
         VideoFormat(codec: c.hwDecodeHEVC ? .hevc : .h264, width: c.panelPixelWidth,
@@ -252,7 +286,8 @@ public final class HostSession {
             return
         }
         let bitsPerPixel = f.codec == .hevc ? MSConstants.bitsPerPixelHEVC : MSConstants.bitsPerPixelH264
-        let profileBitrate = max(MSConstants.minBitrate, Int(Double(f.width * f.height * f.fps) * bitsPerPixel))
+        var profileBitrate = max(MSConstants.minBitrate, Int(Double(f.width * f.height * f.fps) * bitsPerPixel))
+        if let cap = config.maxBitrate { profileBitrate = max(MSConstants.minBitrate, min(profileBitrate, cap)) }
         let rc = RateController(profileBitrate: profileBitrate, linkFecRatio: config.fecRatio)
         rate = rc
         streamLock.lock(); currentFec = rc.fecRatio; streamLock.unlock()

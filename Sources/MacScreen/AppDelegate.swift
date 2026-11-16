@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var host: HostController?
     private var display: DisplayController?
+    private let settingsModel = SettingsModel()
+    private lazy var settingsWindow = SettingsWindowController(model: settingsModel)
 
     init(options: LaunchOptions) {
         self.options = options
@@ -22,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if role == nil {
             role = Dialogs.chooseRole()
             if let r = role { UserDefaults.standard.set(r.rawValue, forKey: LaunchOptions.roleDefaultsKey) }
+        }
+        settingsModel.onChange = { [weak self] s in
+            self?.host?.setStatsOverlay(s.statsOverlay)
+            self?.display?.setStatsOverlay(s.statsOverlay)
         }
         startRole()
         if role != nil { NSApp.activate(ignoringOtherApps: true) }
@@ -43,12 +49,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let caps = LocalCapabilities.make(role: role, windowed: options.windowed, deviceName: store.identity.deviceName)
             switch role {
             case .host:
-                let h = HostController(store: store, caps: caps, stats: options.stats, autoConnect: options.connect,
+                let h = HostController(store: store, caps: caps, stats: options.stats || settingsModel.settings.statsOverlay, autoConnect: options.connect,
                                    cursorMode: options.cursorMode)
                 h.onChange = { [weak self] in self?.rebuildMenu() }
                 host = h
             case .display:
-                display = try DisplayController(store: store, caps: caps, windowed: options.windowed, stats: options.stats,
+                display = try DisplayController(store: store, caps: caps, windowed: options.windowed,
+                                           stats: options.stats || settingsModel.settings.statsOverlay,
                                            latencyCSV: options.latencyCSV)
             }
         } catch {
@@ -85,6 +92,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         display?.addMenuItems(to: menu)
         menu.addItem(.separator())
 
+        if role != nil {
+            let settings = NSMenuItem(title: "Settings\u{2026}", action: #selector(openSettings), keyEquivalent: ",")
+            settings.keyEquivalentModifierMask = .command
+            settings.target = self
+            menu.addItem(settings)
+        }
+
         let quit = NSMenuItem(title: "Quit MacScreen", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.keyEquivalentModifierMask = .command
         menu.addItem(quit)
@@ -98,6 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log.info("Role set to \(newRole.rawValue, privacy: .public)")
         startRole()
         rebuildMenu()
+    }
+
+    @objc private func openSettings() {
+        guard let role = role else { return }
+        settingsWindow.show(role: role)
     }
 
     @objc private func chooseHost() { setRole(.host) }

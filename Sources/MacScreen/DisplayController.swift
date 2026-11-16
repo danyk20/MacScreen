@@ -63,6 +63,17 @@ final class DisplayController {
         }
     }
 
+    func setStatsOverlay(_ on: Bool) {
+        if on {
+            if overlay == nil {
+                overlay = StatsOverlay(corner: .bottomLeft, anchor: { [window] in window.frame }) { [weak self] in self?.statsText() ?? "" }
+            }
+            overlay?.show()
+        } else {
+            overlay?.hide()
+        }
+    }
+
     func stop() {
         session.stop()
         if let p = latencyCSVPath { try? session.latency.writeCSV(to: URL(fileURLWithPath: p)) }
