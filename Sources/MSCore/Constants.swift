@@ -16,6 +16,8 @@ public enum MSConstants {
     public static let reassemblyMaxFrames = 8
     public static let keyframeMinIntervalMs = 250
     public static let feedbackIntervalMs = 100
+    public static let frameStallTimeoutMs = 30
+    public static let nackWaitExtraMs = 2.0
     public static let pingIntervalMs = 250
     public static let controlKeepaliveS = 1.0
     public static let controlTimeoutS = 5.0
