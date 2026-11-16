@@ -4,6 +4,7 @@ import Network
 import os
 import MSCodec
 import MSCore
+import MSProbe
 import MSProtocol
 import MSTransport
 
@@ -92,6 +93,7 @@ public final class DisplaySession {
         let mediaQueue = DispatchQueue(label: "ms.media.display", qos: .userInteractive)
         let decodeQueue = DispatchQueue(label: "ms.decode", qos: .userInteractive)
 
+        var probe: ProbeResponder!
         var result: HandshakeResult?
         var paired = false
         var pairRequested = false
@@ -129,6 +131,9 @@ public final class DisplaySession {
         }
 
         func start() {
+            probe = ProbeResponder(
+                sendControl: { [weak self] m in self?.channel.send(m) },
+                openMedia: { [weak self] in self?.ctlQueue.async { self?.openMediaForProbe() } })
             channel.onSecured = { [weak self] r in self?.secured(r) }
             channel.onMessage = { [weak self] m in self?.message(m) }
             channel.onClosed = { [weak self] _ in self?.teardown() }
@@ -168,6 +173,7 @@ public final class DisplaySession {
                     teardown()
                     return
                 }
+                if probe.handle(m) { return }
                 if case .sessionRequest(let req) = m { startStreaming(req) }
                 else if case .cursorImage(let ci) = m { sink.cursorImage(ci) }
                 else if case .hostState(let hs) = m { sink.hostState(hs) }
@@ -229,6 +235,29 @@ public final class DisplaySession {
             startTimers()
         }
 
+        /// Setup test: listen for UDP without a decoder, so the Host can send link probe trains.
+        func openMediaForProbe() {
+            guard !ended, let r = result else { return }
+            if let m = media {
+                if let p = m.port { channel.send(.sessionAccept(SessionAcceptMessage(udpPort: p))) }
+                return
+            }
+            let server = MediaServer(sealKey: r.keys.medD2H, openKey: r.keys.medH2D, queue: mediaQueue)
+            server.onPacket = { [weak self] type, payload in self?.mediaPacket(type, payload) }
+            server.onListening = { [weak self] port in
+                guard let self = self else { return }
+                self.ctlQueue.async {
+                    guard !self.ended else { return }
+                    self.channel.send(.sessionAccept(SessionAcceptMessage(udpPort: port)))
+                }
+            }
+            media = server
+            do { try server.start() } catch {
+                channel.send(.bye(ByeMessage(reason: "media-failed")))
+                teardown()
+            }
+        }
+
         func startTimers() {
             let dt = DispatchSource.makeTimerSource(queue: decodeQueue)
             dt.schedule(deadline: .now(), repeating: .milliseconds(5))
@@ -281,6 +310,8 @@ public final class DisplaySession {
                     self.process(self.reassembler.ingest(type: type, fragment: frag,
                                                          nowMicros: MonoClock.nowMicros(), rttMs: self.rttMs))
                 }
+            case .linkProbe:
+                probe.handleLinkPacket(payload)
             case .cursor:
                 if let p = try? CursorPacket.decode(payload) { sink.cursorPosition(p) }
             case .ping:
@@ -359,6 +390,7 @@ public final class DisplaySession {
         func teardown() {
             guard !ended else { return }
             ended = true
+            probe?.stop()
             decodeTimer?.cancel(); decodeTimer = nil
             feedbackTimer?.cancel(); feedbackTimer = nil
             pingTimer?.cancel(); pingTimer = nil

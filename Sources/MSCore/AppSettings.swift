@@ -18,6 +18,8 @@ public struct AppSettings: Codable, Equatable {
     public var statsOverlay: Bool = false
     /// Stored only; LoginItem arrives in T4.3.
     public var launchAtLogin: Bool = false
+    /// FEC ratio recommended by the setup test (PLAN 6.10); nil = link default.
+    public var fecRatio: Double?
 
     public init() {}
 
@@ -45,6 +47,7 @@ public struct AppSettings: Codable, Equatable {
         if s.codec != "hevc" && s.codec != "h264" { s.codec = d.codec }
         if s.bitrateCapMbps < 0 { s.bitrateCapMbps = d.bitrateCapMbps }
         if s.cursorMode != "embedded" && s.cursorMode != "overlay" { s.cursorMode = d.cursorMode }
+        if let f = s.fecRatio, f < 0 || f > MSConstants.fecRatioMax { s.fecRatio = nil }
         s.hdr = false
         return s
     }

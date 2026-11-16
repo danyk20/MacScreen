@@ -1,8 +1,19 @@
 import AppKit
+import CoreVideo
+import MSCodec
 import MSCore
 import MSHost
+import MSProbe
 import MSProtocol
 import MSTransport
+
+/// Placeholder for probe-only sessions, which never start a source.
+private final class NoFrameSource: FrameSource {
+    struct Unused: Error {}
+    func start(format: VideoFormat, hiDPI: Bool, display: CapabilitiesMessage,
+               onFrame: @escaping (CVPixelBuffer, UInt64) -> Void) async throws { throw Unused() }
+    func stop() async {}
+}
 
 /// Host role: discovers Displays, connects, drives pairing UI. Main thread only except where noted.
 final class HostController: NSObject {
@@ -24,6 +35,11 @@ final class HostController: NSObject {
     private var sleepObservers: [NSObjectProtocol] = []
     private let mirror = MirrorController()
     private var asleep = false
+    private let power = HostPowerController(assertions: IOKitSleepAssertions())
+    private var probeSession: HostSession?
+    private var probeWindow: ProbeProgressWindow?
+    /// Called on main with the outcome of a setup test that produced a recommendation.
+    var onRecommendation: ((ProbeOutcome) -> Void)?
     var onChange: (() -> Void)?
 
     init(store: IdentityStore, caps: CapabilitiesMessage, stats: Bool, autoConnect: String? = nil,
@@ -117,6 +133,8 @@ final class HostController: NSObject {
         sleepObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
         sleepObservers = []
         session?.stop()
+        probeSession?.stop()
+        power.setStreaming(false)
         browser.stop()
     }
 
@@ -141,9 +159,29 @@ final class HostController: NSObject {
                                   action: connected ? #selector(disconnect) : #selector(connect(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = d.id
-            item.isEnabled = connected || session == nil
+            item.isEnabled = connected || (session == nil && probeSession == nil)
             menu.addItem(item)
         }
+        let setup = NSMenuItem(title: "Run setup test", action: nil, keyEquivalent: "")
+        let idle = session == nil && probeSession == nil
+        if displays.count == 1 {
+            setup.title = "Run setup test on \(displays[0].name)"
+            setup.action = #selector(runSetupTest(_:))
+            setup.target = self
+            setup.representedObject = displays[0].id
+        } else if displays.count > 1 {
+            let sub = NSMenu()
+            for d in displays {
+                let i = NSMenuItem(title: d.name, action: #selector(runSetupTest(_:)), keyEquivalent: "")
+                i.target = self
+                i.representedObject = d.id
+                i.isEnabled = idle
+                sub.addItem(i)
+            }
+            setup.submenu = sub
+        }
+        setup.isEnabled = idle && !displays.isEmpty
+        menu.addItem(setup)
         menu.addItem(.separator())
         let m = NSMenuItem(title: "Mirror Main Display", action: #selector(toggleMirror), keyEquivalent: "")
         m.target = self
@@ -239,10 +277,12 @@ final class HostController: NSObject {
         case .negotiating: update("Negotiating with \(name)")
         case .streaming:
             policy.sessionStreaming()
+            power.setStreaming(true)
             if let id = s.capturedDisplayID { mirror.attach(displayID: id) }
             s.sendHostState(displayAsleep: false, mirroring: mirror.isMirroring)
             update("Streaming to \(name)")
         case .ended(let why):
+            power.setStreaming(false)
             mirror.detach()
             session = nil
             connectedTo = nil
@@ -262,6 +302,80 @@ final class HostController: NSObject {
             if let m = msg, !willRetry, !asleep { _ = Dialogs.alert("MacScreen", m) }
         }
     }
+
+    // MARK: Setup test (PLAN 6.10)
+
+    @objc private func runSetupTest(_ sender: NSMenuItem) {
+        guard session == nil, probeSession == nil,
+              let id = sender.representedObject as? String, let d = displays.first(where: { $0.id == id }) else { return }
+        if let cached = ProbeCache.latest(displayId: id) {
+            let f = DateFormatter()
+            f.dateStyle = .medium
+            f.timeStyle = .short
+            let r = Dialogs.alert("Saved setup test for \(d.name)",
+                                  "A test over \(cached.interface.rawValue) was run on \(f.string(from: cached.date)). Use it, or run the test again?",
+                                  buttons: ["Run again", "Use saved result", "Cancel"])
+            if r == .alertSecondButtonReturn { finishSetupTest(cached, reused: true); return }
+            if r != .alertFirstButtonReturn { return }
+        }
+        var cfg = HostSessionConfig()
+        var run = ProbeRunConfig()
+        run.onProgress = { [weak self] p in DispatchQueue.main.async { self?.probeWindow?.update(p) } }
+        run.onFinished = { [weak self] result in DispatchQueue.main.async { self?.setupTestEnded(result) } }
+        cfg.probe = run
+        let s = HostSession(identityStore: store, capabilities: caps, config: cfg) { _ in NoFrameSource() }
+        s.onStateChange = { [weak self, weak s] st in
+            DispatchQueue.main.async {
+                guard let self = self, let s = s, s === self.probeSession else { return }
+                if case .ended(let why) = st { self.probeSessionEnded(why, name: d.name) }
+            }
+        }
+        s.onPairingCodeRequired = { [weak self, weak s] in
+            DispatchQueue.main.async { if let s = s { self?.askForCode(s, displayName: d.name) } }
+        }
+        probeSession = s
+        let w = ProbeProgressWindow(title: "Setup test: \(d.name)") { [weak self] in self?.probeSession?.stop() }
+        probeWindow = w
+        w.show()
+        s.connect(to: d.endpoint)
+        update("Setup test on \(d.name)\u{2026}")
+    }
+
+    private func setupTestEnded(_ result: Result<ProbeOutcome, ProbeFailure>) {
+        probeWindow?.close()
+        probeWindow = nil
+        switch result {
+        case .success(let o):
+            ProbeCache.store(o)
+            finishSetupTest(o, reused: false)
+        case .failure(let f):
+            if f.message != "Cancelled" { _ = Dialogs.alert("Setup test failed", f.message) }
+        }
+    }
+
+    private func finishSetupTest(_ o: ProbeOutcome, reused: Bool) {
+        let applied = o.recommendation.candidate != nil
+        if applied { onRecommendation?(o) }
+        let t = ProbeSummary.text(o, applied: applied)
+        _ = Dialogs.alert(reused ? t.title + " (saved result)" : t.title, t.body)
+    }
+
+    private func probeSessionEnded(_ why: HostSessionEnd, name: String) {
+        probeSession = nil
+        probeWindow?.close()
+        probeWindow = nil
+        update(statusAfterProbe())
+        switch why {
+        case .stopped: break
+        case .peerBye(let r): _ = Dialogs.alert("Setup test", "\(name) ended the session (\(r)).")
+        case .pairingCodeMismatch: _ = Dialogs.alert("Setup test", "The pairing code did not match.")
+        case .pairingDenied: _ = Dialogs.alert("Setup test", "\(name) did not allow this Mac.")
+        case .failure(let r): _ = Dialogs.alert("Setup test failed", r)
+        case .closed(let r): _ = Dialogs.alert("Setup test", "Connection closed: \(r)")
+        }
+    }
+
+    private func statusAfterProbe() -> String { session == nil ? "Idle" : statusText }
 
     private func update(_ text: String) {
         statusText = text

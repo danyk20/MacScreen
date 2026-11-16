@@ -8,6 +8,12 @@ private final class FakeAssertions: PowerAssertions {
     func wakeDisplay() { log.append("wake") }
 }
 
+private final class FakeSleepAssertions: SleepAssertions {
+    var log: [String] = []
+    func holdSystemAwake() { log.append("hold") }
+    func releaseSystemAwake() { log.append("release") }
+}
+
 final class LifecycleTests: XCTestCase {
     func testPlistContent() throws {
         let data = try LoginItem.plistContent(executablePath: "/Applications/MacScreen.app/Contents/MacOS/MacScreen")
@@ -44,5 +50,17 @@ final class LifecycleTests: XCTestCase {
         XCTAssertEqual(f.log.last, "hold")
         p.hostDisconnected()
         XCTAssertEqual(f.log.last, "release")
+    }
+
+    func testHostHoldsSleepAssertionWhileStreaming() {
+        let f = FakeSleepAssertions()
+        let p = HostPowerController(assertions: f)
+        XCTAssertEqual(f.log, [])
+        p.setStreaming(true)
+        XCTAssertTrue(p.streaming)
+        XCTAssertEqual(f.log, ["hold"])
+        p.setStreaming(false)
+        XCTAssertFalse(p.streaming)
+        XCTAssertEqual(f.log, ["hold", "release"])
     }
 }

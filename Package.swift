@@ -16,8 +16,8 @@ let package = Package(
         .target(name: "MSTransport", dependencies: ["MSCore", "MSProtocol"]),
         .target(name: "MSCodec", dependencies: ["MSCore"]),
         .target(name: "MSProbe", dependencies: ["MSCore", "MSProtocol", "MSTransport", "MSCodec"]),
-        .target(name: "MSHost", dependencies: ["CPrivateAPI", "MSCore", "MSProtocol", "MSTransport", "MSCodec"]),
-        .target(name: "MSDisplay", dependencies: ["MSCore", "MSProtocol", "MSTransport", "MSCodec"]),
+        .target(name: "MSHost", dependencies: ["CPrivateAPI", "MSCore", "MSProtocol", "MSTransport", "MSCodec", "MSProbe"]),
+        .target(name: "MSDisplay", dependencies: ["MSCore", "MSProtocol", "MSTransport", "MSCodec", "MSProbe"]),
         .executableTarget(name: "MSProbeCLI", dependencies: ["MSCore", "MSCodec", "MSProbe"]),
         .executableTarget(name: "MacScreen", dependencies: [
             "MSCore", "MSProtocol", "MSTransport", "MSCodec", "MSProbe", "MSHost", "MSDisplay",

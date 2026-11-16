@@ -52,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let h = HostController(store: store, caps: caps, stats: options.stats || settingsModel.settings.statsOverlay, autoConnect: options.connect,
                                    cursorMode: options.cursorMode)
                 h.onChange = { [weak self] in self?.rebuildMenu() }
+                h.onRecommendation = { [weak self] o in
+                    guard let self = self else { return }
+                    self.settingsModel.settings = o.recommendation.apply(to: self.settingsModel.settings,
+                                                                          panelHeight: o.panelHeight)
+                }
                 host = h
             case .display:
                 display = try DisplayController(store: store, caps: caps, windowed: options.windowed,

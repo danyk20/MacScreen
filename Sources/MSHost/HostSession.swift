@@ -4,6 +4,7 @@ import Network
 import os
 import MSCodec
 import MSCore
+import MSProbe
 import MSProtocol
 import MSTransport
 
@@ -36,12 +37,15 @@ public struct HostSessionConfig {
     public var chooseFormat: (CapabilitiesMessage) -> VideoFormat = HostSessionConfig.defaultFormat
     /// Upper bound for the profile bitrate in bit/s (AppSettings bitrate cap); nil = automatic.
     public var maxBitrate: Int?
+    /// Setup test: when set, the session runs the probe (PLAN 6.10) instead of streaming, then ends.
+    public var probe: ProbeRunConfig?
 
     public init() {}
 
     /// Config from stored settings; the format choice respects the Display's capabilities.
     public init(settings: AppSettings) {
         cursorMode = settings.cursorMode
+        if let f = settings.fecRatio { fecRatio = f }
         if settings.bitrateCapMbps > 0 { maxBitrate = settings.bitrateCapMbps * 1_000_000 }
         chooseFormat = { HostSessionConfig.format(for: $0, settings: settings) }
     }
@@ -119,6 +123,10 @@ public final class HostSession {
     private let history = PacketHistory()
     private var ended = false
     private var peerByeReason: String?
+    private var probeDriver: ProbeHostDriver?
+    private var interfaceType: LinkInterface = .other
+    private let probeMediaLock = NSLock()
+    private var probeMedia: MediaClient?
 
     // Shared between capture, encode, media and control queues.
     private let streamLock = NSLock()
@@ -178,6 +186,11 @@ public final class HostSession {
     }
 
     private func startChannel(_ conn: NWConnection) {
+        if let path = conn.currentPath {
+            if path.usesInterfaceType(.wiredEthernet) { interfaceType = .wired }
+            else if path.usesInterfaceType(.wifi) { interfaceType = .wifi }
+            else if path.usesInterfaceType(.loopback) { interfaceType = .wired }
+        }
         let store = self.store
         let ch = ControlChannel(connection: conn, role: .host, identity: store.identity,
                                 isKnownPeer: { store.isKnown(identityKey: $0) }, queue: queue)
@@ -270,9 +283,11 @@ public final class HostSession {
             guard c.role == "display" else { return }
             displayCaps = c
             sendSessionRequestIfReady()
-        case .sessionAccept(let a):
-            guard state == .negotiating, sessionRequested, media == nil else { return }
-            startStreaming(udpPort: a.udpPort)
+        case .sessionAccept, .probeResult, .linkProbeResult:
+            if config.probe != nil { probeDriver?.receive(m); return }
+            if case .sessionAccept(let a) = m, state == .negotiating, sessionRequested, media == nil {
+                startStreaming(udpPort: a.udpPort)
+            }
         default:
             break
         }
@@ -281,6 +296,7 @@ public final class HostSession {
     private func sendSessionRequestIfReady() {
         guard state == .negotiating, !sessionRequested, let caps = displayCaps else { return }
         sessionRequested = true
+        if let p = config.probe { startProbe(p, displayCaps: caps); return }
         let f = config.chooseFormat(caps)
         format = f
         let wire = WireVideoFormat(codec: f.codec.rawValue, width: f.width, height: f.height,
@@ -288,6 +304,43 @@ public final class HostSession {
         channel?.send(.sessionRequest(SessionRequestMessage(format: wire, hiDPI: config.hiDPI,
                                                             cursorMode: config.cursorMode, audio: false,
                                                             fecRatio: config.fecRatio)))
+    }
+
+    // MARK: Setup test
+
+    private func startProbe(_ p: ProbeRunConfig, displayCaps caps: CapabilitiesMessage) {
+        guard let r = handshake, let ch = channel, let host = ch.remoteHost else {
+            finish(.failure("missing session state"))
+            return
+        }
+        let env = ProbeHostDriver.Environment(
+            sendControl: { [weak self] m in self?.channel?.send(m) },
+            openMedia: { [weak self] port in
+                self?.queue.async {
+                    guard let self = self, !self.ended else { return }
+                    let m = MediaClient(host: host, port: port, sealKey: r.keys.medH2D, openKey: r.keys.medD2H,
+                                        queue: self.mediaQueue)
+                    m.onReady = { [weak self] in self?.probeDriver?.mediaReady() }
+                    m.onFailed = { reason in Self.log.debug("probe media: \(reason, privacy: .public)") }
+                    self.probeMediaLock.lock(); self.probeMedia = m; self.probeMediaLock.unlock()
+                    m.start()
+                }
+            },
+            sendMedia: { [weak self] items, pace in
+                guard let self = self else { return }
+                self.probeMediaLock.lock(); let m = self.probeMedia; self.probeMediaLock.unlock()
+                m?.sendBatch(items, paceOverMicros: pace)
+            })
+        let driver = ProbeHostDriver(environment: env)
+        probeDriver = driver
+        let hostCaps = self.hostCaps
+        let iface = interfaceType
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = driver.run(config: p, hostCaps: hostCaps, displayCaps: caps,
+                                    displayId: r.peerDeviceId, interface: iface)
+            p.onFinished?(result)
+            self?.queue.async { self?.finish(.stopped) }
+        }
     }
 
     // MARK: Streaming
@@ -545,6 +598,8 @@ public final class HostSession {
         lastBuffer = nil
         streamLock.unlock()
         media?.close(); media = nil
+        probeDriver?.cancel(); probeDriver = nil
+        probeMediaLock.lock(); probeMedia?.close(); probeMedia = nil; probeMediaLock.unlock()
         history.removeAll()
         let src = source
         source = nil
