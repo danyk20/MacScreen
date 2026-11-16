@@ -12,6 +12,7 @@ final class EncodeBenchTests: XCTestCase {
         XCTAssertEqual(sample.frames.count, 30)
         XCTAssertTrue(sample.frames[0].isKeyframe)
         XCTAssertGreaterThan(r.p95Ms, 0)
+        XCTAssertEqual(r.warmupExcluded, BenchRules.warmupFrames)
         XCTAssertNoThrow(try JSONEncoder().encode(r))
     }
 
@@ -24,5 +25,6 @@ final class EncodeBenchTests: XCTestCase {
         XCTAssertFalse(r.passed)
         XCTAssertNotNil(r.failureReason)
         XCTAssertNil(s)
+        XCTAssertEqual(r.warmupExcluded, 0)
     }
 }

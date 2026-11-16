@@ -14,9 +14,15 @@ public struct BenchResult: Codable {
     public var throughputFps: Double
     public var passed: Bool
     public var failureReason: String?
+    /// Number of leading frames excluded from meanMs/p95Ms/maxMs (BenchRules.warmupFrames).
+    public var warmupExcluded: Int
+    /// Decoded picture size (DecodeBench only).
+    public var outputWidth: Int?
+    public var outputHeight: Int?
 
     public init(format: VideoFormat, bitrate: Int, frames: Int, hardware: Bool, meanMs: Double, p95Ms: Double,
-                maxMs: Double, throughputFps: Double, passed: Bool, failureReason: String?) {
+                maxMs: Double, throughputFps: Double, passed: Bool, failureReason: String?,
+                warmupExcluded: Int = 0, outputWidth: Int? = nil, outputHeight: Int? = nil) {
         self.format = format
         self.bitrate = bitrate
         self.frames = frames
@@ -27,6 +33,9 @@ public struct BenchResult: Codable {
         self.throughputFps = throughputFps
         self.passed = passed
         self.failureReason = failureReason
+        self.warmupExcluded = warmupExcluded
+        self.outputWidth = outputWidth
+        self.outputHeight = outputHeight
     }
 }
 
@@ -55,9 +64,11 @@ private final class BenchCollector: @unchecked Sendable {
         return frames.count
     }
 
+    /// Frames and latencies, both in frame order.
     func snapshot() -> (frames: [EncodedFrame], latenciesMs: [Double]) {
         lock.lock(); defer { lock.unlock() }
-        return (frames.sorted { $0.captureTimeMicros < $1.captureTimeMicros }, Array(latencies.values))
+        return (frames.sorted { $0.captureTimeMicros < $1.captureTimeMicros },
+                latencies.sorted { $0.key < $1.key }.map { $0.value })
     }
 }
 
@@ -107,20 +118,19 @@ public enum EncodeBench {
         encoder.invalidate()
 
         let snap = collector.snapshot()
-        var stats = RollingStats(window: Swift.max(frameCount, 1))
-        for l in snap.latenciesMs { stats.add(l) }
+        let stats = BenchRules.summarize(latenciesInOrder: snap.latenciesMs)
         let interval = 1000.0 / Double(fps)
         var reason: String?
         if snap.frames.count < frameCount {
             reason = "only \(snap.frames.count) of \(frameCount) frames delivered"
-        } else if stats.p95 >= 0.5 * interval {
-            reason = String(format: "p95 %.2f ms exceeds %.2f ms", stats.p95, 0.5 * interval)
+        } else if stats.p95 >= BenchRules.encodeP95Share * interval {
+            reason = String(format: "p95 %.2f ms exceeds %.2f ms", stats.p95, BenchRules.encodeP95Share * interval)
         }
         let result = BenchResult(
             format: format, bitrate: bitrate, frames: snap.frames.count, hardware: true,
             meanMs: stats.mean, p95Ms: stats.p95, maxMs: stats.max,
             throughputFps: wallSeconds > 0 ? Double(snap.frames.count) / wallSeconds : 0,
-            passed: reason == nil, failureReason: reason)
+            passed: reason == nil, failureReason: reason, warmupExcluded: stats.warmupExcluded)
         let sample = SampleFile(header: .init(format: format, frameCount: snap.frames.count, bitrate: bitrate),
                                 frames: snap.frames)
         return (result, sample)
