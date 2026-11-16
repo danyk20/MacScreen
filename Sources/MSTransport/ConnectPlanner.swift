@@ -1,8 +1,10 @@
 import Foundation
 import Network
 
+private final class DoneFlag: @unchecked Sendable { var done = false }
+
 /// One step of the interface preference order (PLAN.md section 7, Lifecycle).
-public struct ConnectAttempt: Equatable {
+public struct ConnectAttempt: Equatable, @unchecked Sendable {
     public let interface: NWInterface.InterfaceType?   // nil = unconstrained
     public let timeout: TimeInterval
     public init(interface: NWInterface.InterfaceType?, timeout: TimeInterval) {
@@ -49,11 +51,11 @@ public struct ConnectPlanner {
         let conn = NWConnection(to: endpoint, using: params)
         return await withCheckedContinuation { (cont: CheckedContinuation<NWConnection?, Never>) in
             let lock = NSLock()
-            var done = false
-            func finish(_ ok: Bool) {
+            let flag = DoneFlag()
+            @Sendable func finish(_ ok: Bool) {
                 lock.lock()
-                if done { lock.unlock(); return }
-                done = true
+                if flag.done { lock.unlock(); return }
+                flag.done = true
                 lock.unlock()
                 if ok { conn.stateUpdateHandler = nil } else { conn.stateUpdateHandler = nil; conn.cancel() }
                 cont.resume(returning: ok ? conn : nil)

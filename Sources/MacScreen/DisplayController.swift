@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import MSCore
 import MSCodec
 import MSDisplay
@@ -108,7 +109,7 @@ final class DisplayController {
     @objc private func exportLatency() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "macscreen-latency.csv"
-        panel.allowedFileTypes = ["csv"]
+        panel.allowedContentTypes = [.commaSeparatedText]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try session.latency.writeCSV(to: url) } catch {
             _ = Dialogs.alert("Export failed", String(describing: error))

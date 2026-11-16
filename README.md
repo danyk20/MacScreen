@@ -31,6 +31,8 @@ To build the app bundle (universal arm64 and x86_64, release):
 ```
 Scripts/make-dev-cert.sh   # once: creates the self-signed "MacScreen Dev" signing identity
 Scripts/make-app.sh        # writes build/MacScreen.app and build/msprobe
+Scripts/deploy-display.sh user@imac.local   # optional: copy the app to the iMac (needs Remote Login)
+Scripts/test.sh            # build and run the tests (--with-display-tests adds the screen-flickering ones)
 ```
 
 Details, signing identity behaviour and the audio driver are in [docs/USAGE.md](docs/USAGE.md).
