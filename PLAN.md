@@ -113,8 +113,12 @@ Sources/
   MSProbe/                         TestPattern, SampleFile, EncodeBench, DecodeBench, LinkProbe,
                                    ProfileRecommender
   MSProbeCLI/                      CLI target; product (binary) name is `msprobe`
-  MacScreen/                       App: AppDelegate, RoleChooser, HostMenu, DisplayController,
-                                   PairingUI, SettingsWindow, LoginItem, IdentityStore, Permissions
+  MacScreen/                       App: AppDelegate, Role (flags), HostController (menu, discovery,
+                                   connect, code entry), DisplayController (window, renderer, session,
+                                   pairing-code menu), Dialogs (role chooser, code entry, permission
+                                   guidance), StatsOverlay, Capabilities, Identity (store per role;
+                                   `MACSCREEN_HOME` or `--windowed` gives separate folders).
+                                   Later: SettingsWindow, LoginItem
 AudioDriver/                       MacScreenAudio.c, Info.plist
 Scripts/                           make-dev-cert.sh, make-app.sh, deploy-display.sh,
                                    build-audio-driver.sh, install-audio-driver.sh, uninstall-audio-driver.sh

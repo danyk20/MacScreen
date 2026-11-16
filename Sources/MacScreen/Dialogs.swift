@@ -1,0 +1,47 @@
+import AppKit
+
+/// Modal helpers (main thread only). The app is an accessory app, so activate before showing.
+enum Dialogs {
+    static func alert(_ title: String, _ info: String, buttons: [String] = ["OK"]) -> NSApplication.ModalResponse {
+        NSApp.activate(ignoringOtherApps: true)
+        let a = NSAlert()
+        a.messageText = title
+        a.informativeText = info
+        buttons.forEach { a.addButton(withTitle: $0) }
+        return a.runModal()
+    }
+
+    /// Returns the typed text, or nil when cancelled.
+    static func prompt(_ title: String, _ info: String, placeholder: String) -> String? {
+        NSApp.activate(ignoringOtherApps: true)
+        let a = NSAlert()
+        a.messageText = title
+        a.informativeText = info
+        a.addButton(withTitle: "Pair")
+        a.addButton(withTitle: "Cancel")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 28))
+        field.placeholderString = placeholder
+        field.font = NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .regular)
+        a.accessoryView = field
+        a.window.initialFirstResponder = field
+        return a.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
+    }
+
+    /// First-launch role choice. nil when dismissed.
+    static func chooseRole() -> Role? {
+        let r = alert("How will this Mac be used?",
+                      "Host shares its desktop to another Mac. Display is the Mac that shows it (for example an old iMac).",
+                      buttons: ["Host", "Display"])
+        return r == .alertFirstButtonReturn ? .host : (r == .alertSecondButtonReturn ? .display : nil)
+    }
+
+    static func screenRecordingGuidance() {
+        let r = alert("Screen Recording permission needed",
+                      "MacScreen captures a virtual display and needs Screen Recording access. Enable MacScreen in System Settings > Privacy & Security > Screen Recording, then quit and reopen the app.",
+                      buttons: ["Open System Settings", "Cancel"])
+        if r == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}

@@ -91,6 +91,9 @@ public final class HostSession {
     private var frameCounter: UInt32 = 0     // encode queue only
     public var framesSent: UInt64 { streamLock.lock(); defer { streamLock.unlock() }; return framesSentValue }
     private var framesSentValue: UInt64 = 0
+    private var bytesSentValue: UInt64 = 0
+    /// Encoded payload bytes handed to the media channel (before FEC and encryption).
+    public var bytesSent: UInt64 { streamLock.lock(); defer { streamLock.unlock() }; return bytesSentValue }
     private var framesDropped: UInt64 = 0
 
     public init(identityStore: IdentityStore, capabilities: CapabilitiesMessage,
@@ -312,8 +315,11 @@ public final class HostSession {
         frameCounter &+= 1
         if frameCounter == 0 { frameCounter = 1 }
         let id = frameCounter
+        var payloadBytes: UInt64 = 0
         do {
-            let frags = try Fragmenter.fragment(payload: FramePayload.encode(f), frameId: id,
+            let payload = FramePayload.encode(f)
+            payloadBytes = UInt64(payload.count)
+            let frags = try Fragmenter.fragment(payload: payload, frameId: id,
                                                 isKeyframe: f.isKeyframe,
                                                 captureTimeMicros: f.captureTimeMicros,
                                                 fecRatio: config.fecRatio)
@@ -326,6 +332,7 @@ public final class HostSession {
         if lastSentFrameId <= highestDecoded { lastProgress = MonoClock.nowMicros() }
         lastSentFrameId = id
         framesSentValue += 1
+        bytesSentValue += payloadBytes
         streamLock.unlock()
     }
 

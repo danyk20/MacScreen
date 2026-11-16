@@ -38,32 +38,16 @@ Known gaps:
 - `Reassembler.fragsLostEstimate` over-counts with FEC on; real loss should come from packet
   counter gaps (do this in T3.3).
 
-## Uncommitted work in the tree (verify first)
+## Status (2026-11-16 evening)
 
-A subagent doing the T2.10 prerequisites was stopped mid-task. The tree builds, tests not verified.
-Intended changes — finish or redo them, run the tests, then commit as `T2.10a`:
-1. `HandshakeResult.peerKnowsUs: Bool?` (Host: from `helloReply.knowsPeer`; Display: nil).
-2. `ControlMessage.pairRequest` (type 9, empty JSON struct). Host sends it when pairing is needed;
-   the Display then shows the code.
-3. `ControlChannel.remoteHost: NWEndpoint.Host?` (so the Host can open UDP to the same address).
-4. `Reassembler.forceKeyframeResync(nowMicros:)` (used when the decoder rejects a frame).
-`PLAN.md` also has an uncommitted wording update for `pairRequest`.
-
-## Next: T2.10 and T2.11 (first live picture)
-
-Design notes for T2.10 that are not in `PLAN.md` yet (add them there before briefing):
-- Give `HostSession` a frame-source protocol with two implementations: virtual display + `ScreenCapturer`,
-  and `TestPattern` (from MSProbe). Give `DisplaySession` a frame-sink protocol: `MetalRenderer` window,
-  or a test sink. Then add an in-process integration test (Host + Display over localhost with the
-  test pattern) that needs no Screen Recording permission.
-- Pairing: needed if the Host does not know the Display or `peerKnowsUs == false`. Host sends
-  `pairRequest`, user types the code, Host compares, sends `pairConfirm`, Display asks "Allow?",
-  replies `pairResult`. Until paired, the Display accepts only pairing messages and `bye`.
-- Idle-screen recovery: the Host keeps the last captured pixel buffer. On a keyframe request with no
-  new capture within 50 ms, or when feedback shows `highestDecodedFrame` behind the last sent frame
-  for 200 ms, it re-encodes that buffer as a keyframe.
-- Until T3.1, use the embedded cursor (`showsCursor = true`). No NACK handling until T3.2.
-- One Display session at a time; a second Host gets `bye("busy")`.
+T2.10a, T2.10 and T2.11 committed; all tests pass. Never run live yet: UI untested, DisplayCaptureSource
+(virtual display + ScreenCapturer) never captured, idle-screen recovery untested.
+Next: loopback run (ask user: make-dev-cert.sh, Screen Recording, confirm picture). Run commands:
+`build/MacScreen.app/Contents/MacOS/MacScreen --role display --windowed --stats` and
+`... --role host --stats`; in Host's "MS" menu choose Connect, type the code, Allow on the Display.
+Then: user wants a private GitHub repo under their profile created, committed and pushed at the end
+of this stretch (ask repo name first; check gh auth; no secrets/build artifacts).
+Then M3 (NACK ignored until T3.2; Display passes rttMs nil to Reassembler).
 
 ## Waiting on the user
 
