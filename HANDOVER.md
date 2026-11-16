@@ -38,18 +38,41 @@ Known gaps:
 - `Reassembler.fragsLostEstimate` over-counts with FEC on; real loss should come from packet
   counter gaps (do this in T3.3).
 
-## Status (2026-11-16 evening)
+## Status (2026-11-17, after unattended run)
 
-T2.10a, T2.10 and T2.11 committed; all tests pass. Never run live yet: UI untested, DisplayCaptureSource
-(virtual display + ScreenCapturer) never captured, idle-screen recovery untested.
-LOOPBACK CONFIRMED by user (2026-11-17): virtual display live in --windowed Display, window arrangement works, feels fast. Dev cert installed. Private repo danyk20/MacScreen pushed (HTTPS via gh); push after each task.
-T3.2, T3.3 committed; T3.4 in progress. Remaining M3: T3.1 cursor, T3.5, T3.6, then G2/G3 need iMac.
-(Old note: loopback run (ask user: make-dev-cert.sh, Screen Recording, confirm picture). Run commands:
-`build/MacScreen.app/Contents/MacOS/MacScreen --role display --windowed --stats` and
-`... --role host --stats`; in Host's "MS" menu choose Connect, type the code, Allow on the Display.
-Then: user wants a private GitHub repo under their profile created, committed and pushed at the end
-of this stretch (ask repo name first; check gh auth; no secrets/build artifacts).
-Then M3 (NACK ignored until T3.2; Display passes rttMs nil to Reassembler).
+Committed and pushed to private repo danyk20/MacScreen (HTTPS remote): M0, M1, M2 (T2.1-T2.11),
+M3 T3.1-T3.6, M4 T4.1-T4.4, M5 T5.1-T5.3 (driver written+compiled, NOT installed), T6.1 (P3),
+T7.1 (docs), T7.2 (cleanup, Scripts/test.sh, Scripts/deploy-display.sh). 0 build warnings.
+Loopback on this Mac confirmed live by the user (virtual display, --windowed, fast).
+Not done: T6.2/T6.3 (HDR, Gate G5), anything needing the iMac.
+
+### Pending decision gates (Fable only, one question per call)
+G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
+G4 driver load result on macOS 27; G5 HDR spike.
+
+### iMac checklist, in order (needs the user)
+1. Probe: copy build/imac-probe.zip to iMac, unzip, `xattr -dr com.apple.quarantine .`,
+   `./msprobe decode-all ladder > imac-result.json` -> G1.
+2. Deploy: enable Remote Login on iMac, `Scripts/deploy-display.sh user@imac.local`
+   (or copy build/MacScreen.app manually), launch `--role display`. Host: `--role host --stats
+   --connect <iMac name>`. Pairing: code on Display, type on Host, Allow on iMac -> G2.
+3. Run "Run setup test" from the Host menu; check Settings; try `--cursor overlay`.
+4. Latency: `--latency-csv`, wired and Wi-Fi -> G3.
+5. Audio (experimental): Scripts/build-audio-driver.sh (click "Always Allow" on the keychain
+   prompt once), Scripts/install-audio-driver.sh (sudo, restarts coreaudiod) -> G4; 30 min
+   playback + clap test.
+
+### Known gaps / unverified live
+- Audio buffer target: AudioPlayer uses 40 ms, MSConstants.audioTargetBufferMs and PLAN 6.9 say
+  25 ms; reconcile at G3.
+- Dev-cert codesign can hang waiting for a keychain prompt (Always Allow once).
+- ScreenCapturerTests skip when the main display is asleep/locked; never seen capturing in tests.
+- Never run live: sleep/wake teardown+reconnect, mirror toggle, cursor overlay, settings UI,
+  setup-test UI, login item, power assertions, P3 on a real P3 panel, AUHAL/driver, wired->Wi-Fi
+  fallback, NACK/rate control on a real network.
+- Menu bar item "MS" is invisible if the menu bar is full or the frontmost app is full screen;
+  use `--connect` as a workaround.
+- Real HDR: plan says only if a virtual display can advertise it (G5).
 
 ## Waiting on the user
 
