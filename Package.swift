@@ -10,7 +10,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "CPrivateAPI", path: "Sources/CPrivateAPI"),
-        .target(name: "MSCore"),
+        .target(name: "CMSAtomics", path: "Sources/CMSAtomics"),
+        .target(name: "MSCore", dependencies: ["CMSAtomics"]),
         .target(name: "MSProtocol", dependencies: ["MSCore"]),
         .target(name: "MSTransport", dependencies: ["MSCore", "MSProtocol"]),
         .target(name: "MSCodec", dependencies: ["MSCore"]),
