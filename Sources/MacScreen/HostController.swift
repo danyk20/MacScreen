@@ -22,6 +22,8 @@ final class HostController: NSObject {
     private var policy = ReconnectPolicy()
     private var reconnectGeneration = 0
     private var sleepObservers: [NSObjectProtocol] = []
+    private let mirror = MirrorController()
+    private var asleep = false
     var onChange: (() -> Void)?
 
     init(store: IdentityStore, caps: CapabilitiesMessage, stats: Bool, autoConnect: String? = nil,
@@ -44,10 +46,18 @@ final class HostController: NSObject {
         let nc = NSWorkspace.shared.notificationCenter
         sleepObservers = [
             nc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
-                self?.session?.sendHostState(displayAsleep: true, mirroring: false)
+                guard let self = self else { return }
+                self.session?.sendHostState(displayAsleep: true, mirroring: self.mirror.isMirroring)
             },
             nc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
-                self?.session?.sendHostState(displayAsleep: false, mirroring: false)
+                guard let self = self else { return }
+                self.session?.sendHostState(displayAsleep: false, mirroring: self.mirror.isMirroring)
+            },
+            nc.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.hostWillSleep()
+            },
+            nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.hostDidWake()
             },
         ]
         if stats {
@@ -66,7 +76,44 @@ final class HostController: NSObject {
         }
     }
 
+    // MARK: Sleep / wake
+
+    private var resumeTargetAfterWake: String?
+
+    /// `bye` + teardown (ControlChannel.close sends bye; the source destroys the virtual display).
+    private func hostWillSleep() {
+        asleep = true
+        resumeTargetAfterWake = policy.sleepResumeTarget
+        reconnectGeneration += 1  // cancel pending re-checks
+        guard let s = session else { return }
+        mirror.detach()
+        s.stop()
+        update("Sleeping")
+    }
+
+    /// Re-arm the policy; the Display must be seen again (browser restarted) and the settle delay must pass.
+    private func hostDidWake() {
+        asleep = false
+        guard let id = resumeTargetAfterWake else { return }
+        resumeTargetAfterWake = nil
+        displays = []
+        browser.stop()
+        browser.start()
+        policy.resumeAfterWake(id: id, now: now())
+        update("Reconnecting\u{2026}")
+        evaluateReconnect()
+    }
+
+    // MARK: Mirror
+
+    @objc private func toggleMirror() {
+        mirror.setMirror(!mirror.wantsMirror)
+        session?.sendHostState(displayAsleep: false, mirroring: mirror.isMirroring)
+        onChange?()
+    }
+
     func stop() {
+        mirror.detach()
         sleepObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
         sleepObservers = []
         session?.stop()
@@ -97,6 +144,11 @@ final class HostController: NSObject {
             item.isEnabled = connected || session == nil
             menu.addItem(item)
         }
+        menu.addItem(.separator())
+        let m = NSMenuItem(title: "Mirror Main Display", action: #selector(toggleMirror), keyEquivalent: "")
+        m.target = self
+        m.state = mirror.wantsMirror ? .on : .off
+        menu.addItem(m)
     }
 
     @objc private func showPermission() { Dialogs.screenRecordingGuidance() }
@@ -145,6 +197,7 @@ final class HostController: NSObject {
     @objc private func disconnect() {
         policy.userDisconnect()
         reconnectGeneration += 1
+        mirror.detach()
         session?.stop()
     }
 
@@ -186,9 +239,11 @@ final class HostController: NSObject {
         case .negotiating: update("Negotiating with \(name)")
         case .streaming:
             policy.sessionStreaming()
-            s.sendHostState(displayAsleep: false, mirroring: false)
+            if let id = s.capturedDisplayID { mirror.attach(displayID: id) }
+            s.sendHostState(displayAsleep: false, mirroring: mirror.isMirroring)
             update("Streaming to \(name)")
         case .ended(let why):
+            mirror.detach()
             session = nil
             connectedTo = nil
             policy.sessionEnded(why, now: now())
@@ -204,7 +259,7 @@ final class HostController: NSObject {
             case .failure(let r): msg = "Failed: \(r)"
             case .closed(let r): msg = "Connection closed: \(r)"
             }
-            if let m = msg, !willRetry { _ = Dialogs.alert("MacScreen", m) }
+            if let m = msg, !willRetry, !asleep { _ = Dialogs.alert("MacScreen", m) }
         }
     }
 

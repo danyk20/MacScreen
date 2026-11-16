@@ -59,6 +59,21 @@ public struct ReconnectPolicy: Equatable {
         return max(0, nextAllowedAt - now)
     }
 
+    /// Display id to resume after sleep, if auto-reconnect is armed. Read before stopping the session.
+    public var sleepResumeTarget: String? { enabled ? targetId : nil }
+
+    /// Seconds after wake before the first reconnect; lets the network and Bonjour settle.
+    public static let wakeSettleDelay: Double = 3
+
+    /// Re-arm after wake: the Display must be seen again and the settle delay must pass. No tight loop.
+    public mutating func resumeAfterWake(id: String, now: Double) {
+        enabled = true
+        targetId = id
+        failures = 0
+        attemptInFlight = false
+        nextAllowedAt = now + Self.wakeSettleDelay
+    }
+
     public mutating func reconnectStarted() {
         attemptInFlight = true
     }

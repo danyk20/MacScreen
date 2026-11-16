@@ -220,6 +220,11 @@ public final class HostSession {
         }
     }
 
+    /// The virtual display being captured, once it exists.
+    public var capturedDisplayID: CGDirectDisplayID? {
+        queue.sync { (source as? CursorAwareSource)?.capturedDisplayID }
+    }
+
     public func stop() {
         queue.async { [self] in finish(.stopped) }
     }

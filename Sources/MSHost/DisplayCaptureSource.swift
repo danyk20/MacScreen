@@ -1,6 +1,5 @@
 import CoreGraphics
 import CoreVideo
-import CryptoKit
 import Foundation
 import MSCodec
 import MSCore
@@ -29,9 +28,7 @@ public final class DisplayCaptureSource: CursorAwareSource {
 
     public func start(format: VideoFormat, hiDPI: Bool, display: CapabilitiesMessage,
                       onFrame: @escaping (CVPixelBuffer, UInt64) -> Void) async throws {
-        let digest = SHA256.hash(data: Data(peer.deviceId.utf8))
-        let b = Array(digest)
-        let serial = (UInt32(b[0]) << 24) | (UInt32(b[1]) << 16) | (UInt32(b[2]) << 8) | UInt32(b[3])
+        let serial = VirtualDisplay.serial(forDeviceId: peer.deviceId)  // stable per Display: macOS restores arrangement
         let cfg = VirtualDisplayConfig(
             name: peer.deviceName, pixelWidth: format.width, pixelHeight: format.height, hiDPI: hiDPI,
             refreshRate: 60, sizeMM: CGSize(width: display.panelWidthMM, height: display.panelHeightMM),
