@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>app.macscreen.MacScreen</string>
+	<key>CFBundleName</key>
+	<string>MacScreen</string>
+	<key>CFBundleDisplayName</key>
+	<string>MacScreen</string>
+	<key>CFBundleExecutable</key>
+	<string>MacScreen</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>12.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>MacScreen finds and connects to your other Mac on the local network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_macscreen._tcp</string>
+	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MacScreen reads its own virtual audio device to send sound to the display Mac. It does not use the microphone.</string>
+</dict>
+</plist>
