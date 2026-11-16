@@ -72,6 +72,10 @@ public final class HostSession {
     private var source: FrameSource?
     private var media: MediaClient?
     private var encoder: VideoEncoder?
+    private var rate: RateController?     // media queue after start
+    private var fpsDivisor = 1             // guarded by streamLock; 2 after reconfigure to 30 fps
+    private var captureTick = 0            // source thread only
+    private var currentFec = 0.0           // guarded by streamLock
     private var recoveryTimer: DispatchSourceTimer?
     private var pingTimer: DispatchSourceTimer?
     private let pingClock = PingClock()     // media queue only
@@ -222,7 +226,11 @@ public final class HostSession {
             return
         }
         let bitsPerPixel = f.codec == .hevc ? MSConstants.bitsPerPixelHEVC : MSConstants.bitsPerPixelH264
-        let bitrate = max(MSConstants.minBitrate, Int(Double(f.width * f.height * f.fps) * bitsPerPixel))
+        let profileBitrate = max(MSConstants.minBitrate, Int(Double(f.width * f.height * f.fps) * bitsPerPixel))
+        let rc = RateController(profileBitrate: profileBitrate, linkFecRatio: config.fecRatio)
+        rate = rc
+        streamLock.lock(); currentFec = rc.fecRatio; streamLock.unlock()
+        let bitrate = rc.initialBitrate
         do {
             encoder = try VideoEncoder(format: f, bitrate: bitrate) { [weak self] frame in
                 self?.encodeQueue.async { self?.sendFrame(frame) }
@@ -302,6 +310,10 @@ public final class HostSession {
             streamLock.unlock()
             return
         }
+        if fpsDivisor > 1 {
+            captureTick &+= 1
+            if captureTick % fpsDivisor != 0 { streamLock.unlock(); return }
+        }
         keyframePendingSince = nil
         streamLock.unlock()
         enc.encode(pb, captureTimeMicros: captureTimeMicros)
@@ -311,6 +323,7 @@ public final class HostSession {
     private func sendFrame(_ f: EncodedFrame) {
         streamLock.lock()
         let active = streamActive
+        let fec = currentFec
         streamLock.unlock()
         guard active, let m = media else { return }
         frameCounter &+= 1
@@ -323,7 +336,7 @@ public final class HostSession {
             let frags = try Fragmenter.fragment(payload: payload, frameId: id,
                                                 isKeyframe: f.isKeyframe,
                                                 captureTimeMicros: f.captureTimeMicros,
-                                                fecRatio: config.fecRatio)
+                                                fecRatio: fec)
             history.record(frameId: id, fragments: frags, nowMicros: MonoClock.nowMicros())
             m.sendBatch(frags.map { ($0.type, $0.fragment.encode()) }, paceOverMicros: 4000)
         } catch {
@@ -378,6 +391,25 @@ public final class HostSession {
         }
         streamLock.unlock()
         if force { encoder?.requestKeyframe() }
+        if let out = rate?.ingest(fb, nowMicros: now) { applyRate(out) }
+    }
+
+    /// Media queue. Applies bitrate and FEC live; a 30 fps switch is announced on the control channel.
+    private func applyRate(_ out: RateController.Output) {
+        encoder?.setBitrate(out.bitrate)
+        streamLock.lock()
+        currentFec = out.fecRatio
+        if out.switchTo30fps { fpsDivisor = 2 }
+        streamLock.unlock()
+        if out.switchTo30fps {
+            queue.async { [self] in
+                guard !ended, var f = format, let ch = channel else { return }
+                f.fps = 30
+                format = f
+                ch.send(.reconfigure(ReconfigureMessage(format: WireVideoFormat(
+                    codec: f.codec.rawValue, width: f.width, height: f.height, fps: f.fps, bitDepth: f.bitDepth))))
+            }
+        }
     }
 
     /// Control queue, every 10 ms: idle-screen recovery.
