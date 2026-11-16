@@ -2,13 +2,20 @@ import AppKit
 
 /// Small always-on-top text panel, refreshed once a second (`--stats`).
 final class StatsOverlay {
+    enum Corner { case topLeft, bottomLeft }
+
+    private let corner: Corner
+    /// Rectangle (screen coordinates) the overlay sits inside; nil means the main screen.
+    private let anchor: (() -> NSRect)?
     private let panel: NSPanel
     private let label = NSTextField(labelWithString: "")
     private var timer: Timer?
     private let text: () -> String
 
-    init(text: @escaping () -> String) {
+    init(corner: Corner = .topLeft, anchor: (() -> NSRect)? = nil, text: @escaping () -> String) {
         self.text = text
+        self.corner = corner
+        self.anchor = anchor
         panel = NSPanel(contentRect: NSRect(x: 20, y: 20, width: 300, height: 90),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue)
@@ -23,7 +30,16 @@ final class StatsOverlay {
         panel.contentView?.addSubview(label)
     }
 
+    private func reposition() {
+        let area = anchor?() ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 720)
+        let size = panel.frame.size
+        let x = area.minX + 20
+        let y = corner == .topLeft ? area.maxY - size.height - 20 : area.minY + 20
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
     func show() {
+        reposition()
         refresh()
         panel.orderFrontRegardless()
         timer?.invalidate()
@@ -36,7 +52,10 @@ final class StatsOverlay {
         panel.orderOut(nil)
     }
 
-    private func refresh() { label.stringValue = text() }
+    private func refresh() {
+        reposition()
+        label.stringValue = text()
+    }
 }
 
 /// Turns monotonically growing counters into per-second rates.

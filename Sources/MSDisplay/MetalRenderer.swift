@@ -137,11 +137,13 @@ public final class MetalRenderer {
             return
         }
         guard let cb = commandQueue.makeCommandBuffer() else { addFailure(); return }
+        Signpost.begin("render", id: frame.captureMicros)
         let keep: [CVMetalTexture]
         do {
             keep = try encode(frame.buffer, into: cb, target: drawable.texture)
         } catch {
             log.error("draw failed: \(String(describing: error))")
+            Signpost.end("render", id: frame.captureMicros)
             addFailure()
             return
         }
@@ -156,6 +158,7 @@ public final class MetalRenderer {
                 let ageMicros = UInt64(age * 1e6)
                 at = now >= ageMicros ? now - ageMicros : now
             }
+            Signpost.end("render", id: capture)
             self.queue.async { self.onPresented?(capture, at) }
         }
         let buffer = frame.buffer

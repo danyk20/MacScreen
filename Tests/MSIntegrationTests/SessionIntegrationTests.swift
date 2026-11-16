@@ -72,10 +72,13 @@ private final class TestSink: DisplaySink {
     let started = Locked(0)
     let ended = Locked(0)
     var allow = true
+    /// Simulates the renderer's presented callback.
+    var latency: LatencyRecorder?
     var onCode: ((String) -> Void)?
 
     func present(_ pb: CVPixelBuffer, captureTimeMicros: UInt64) {
         frames.mutate { $0 += 1 }
+        latency?.presented(captureMicros: captureTimeMicros, atMicros: MonoClock.nowMicros())
         if frames.get() == 1 { sizes.mutate { $0 = [CVPixelBufferGetWidth(pb), CVPixelBufferGetHeight(pb)] } }
     }
     func showPairingCode(_ c: String, hostName: String) {
@@ -135,6 +138,33 @@ final class SessionIntegrationTests: XCTestCase {
     private func host(_ store: IdentityStore, _ src: FrameSource) -> HostSession {
         HostSession(identityStore: store, capabilities: caps(role: "host", name: "H"),
                     config: hostConfig(), makeSource: { _ in src })
+    }
+
+    func testLatencyCSVFromLoopback() throws {
+        let hostStore = try makeStore("Host")
+        let sink = TestSink()
+        let (display, endpoint) = try startDisplay(try makeStore("Display"), sink: sink)
+        sink.latency = display.latency
+        defer { display.stop() }
+        let h = host(hostStore, TestPatternSource())
+        sink.onCode = { h.submitPairingCode($0) }
+        h.connect(to: endpoint)
+        wait("frames") { sink.frames.get() >= 40 }
+        h.stop()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ms-latency-\(UUID().uuidString).csv")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try display.latency.writeCSV(to: url)
+        let lines = try String(contentsOf: url).split(separator: "\n").map(String.init)
+        XCTAssertGreaterThan(lines.count, 20, "csv should have a row per presented frame")
+        XCTAssertEqual(lines[0], LatencyRecorder.csvHeader)
+        let cols = lines[1].split(separator: ",", omittingEmptySubsequences: false)
+        XCTAssertEqual(cols.count, LatencyRecorder.csvHeader.split(separator: ",").count)
+        let snap = display.latency.snapshot
+        XCTAssertGreaterThan(snap.count, 20)
+        // Loopback on one clock: roughly encode + decode time, well under a second.
+        XCTAssertGreaterThan(snap.p50, -50)
+        XCTAssertLessThan(snap.p50, 1000)
+        XCTAssertGreaterThanOrEqual(snap.p95, snap.p50)
     }
 
     func testOverlayCursorPacketsArrive() throws {

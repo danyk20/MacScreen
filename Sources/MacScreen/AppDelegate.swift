@@ -48,7 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 h.onChange = { [weak self] in self?.rebuildMenu() }
                 host = h
             case .display:
-                display = try DisplayController(store: store, caps: caps, windowed: options.windowed, stats: options.stats)
+                display = try DisplayController(store: store, caps: caps, windowed: options.windowed, stats: options.stats,
+                                           latencyCSV: options.latencyCSV)
             }
         } catch {
             log.error("Start failed: \(String(describing: error), privacy: .public)")

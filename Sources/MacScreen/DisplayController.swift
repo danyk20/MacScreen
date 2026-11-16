@@ -37,7 +37,11 @@ final class DisplayController {
     private var overlay: StatsOverlay?
     private var framesMeter = RateMeter()
 
-    init(store: IdentityStore, caps: CapabilitiesMessage, windowed: Bool, stats: Bool) throws {
+    private let latencyCSVPath: String?
+
+    init(store: IdentityStore, caps: CapabilitiesMessage, windowed: Bool, stats: Bool,
+         latencyCSV: String? = nil) throws {
+        latencyCSVPath = latencyCSV
         window = DisplayWindow(windowed: windowed)
         renderer = try MetalRenderer()
         renderer.attach(layer: window.metalLayer, drawableSize: window.drawablePixelSize)
@@ -50,19 +54,37 @@ final class DisplayController {
         }
         sink = AppSink(rs)
         session = DisplaySession(identityStore: store, capabilities: caps, sink: sink)
+        let rec = session.latency
+        renderer.onPresented = { capture, at in rec.presented(captureMicros: capture, atMicros: at) }
         try session.start()
         if stats {
-            overlay = StatsOverlay { [weak self] in self?.statsText() ?? "" }
+            overlay = StatsOverlay(corner: .bottomLeft, anchor: { [window] in window.frame }) { [weak self] in self?.statsText() ?? "" }
             overlay?.show()
         }
     }
 
-    func stop() { session.stop() }
+    func stop() {
+        session.stop()
+        if let p = latencyCSVPath { try? session.latency.writeCSV(to: URL(fileURLWithPath: p)) }
+    }
 
     func addMenuItems(to menu: NSMenu) {
         let i = NSMenuItem(title: "Show pairing code", action: #selector(showCode), keyEquivalent: "")
         i.target = self
         menu.addItem(i)
+        let e = NSMenuItem(title: "Export latency CSV", action: #selector(exportLatency), keyEquivalent: "")
+        e.target = self
+        menu.addItem(e)
+    }
+
+    @objc private func exportLatency() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "macscreen-latency.csv"
+        panel.allowedFileTypes = ["csv"]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try session.latency.writeCSV(to: url) } catch {
+            _ = Dialogs.alert("Export failed", String(describing: error))
+        }
     }
 
     @objc private func showCode() {
@@ -77,7 +99,8 @@ final class DisplayController {
     private func statsText() -> String {
         let c = renderer.counters
         let fps = framesMeter.rate(c.framesDrawn)
-        return String(format: "Display  %.0f fps\nframes received %llu  drawn %llu  skipped %llu",
-                      fps, c.framesSubmitted, c.framesDrawn, c.framesSkipped)
+        let l = session.latency.snapshot
+        return String(format: "Display  %.0f fps\nframes received %llu  drawn %llu  skipped %llu\nlatency p50 %.1f  p95 %.1f  max %.1f ms",
+                      fps, c.framesSubmitted, c.framesDrawn, c.framesSkipped, l.p50, l.p95, l.max)
     }
 }

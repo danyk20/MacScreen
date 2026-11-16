@@ -356,11 +356,16 @@ public final class HostSession {
         }
         keyframePendingSince = nil
         streamLock.unlock()
+        Signpost.event("capture", id: captureTimeMicros)
+        Signpost.begin("encode", id: captureTimeMicros)
         enc.encode(pb, captureTimeMicros: captureTimeMicros)
     }
 
     /// Encode queue.
     private func sendFrame(_ f: EncodedFrame) {
+        Signpost.end("encode", id: f.captureTimeMicros)
+        Signpost.begin("packetize_send", id: f.captureTimeMicros)
+        defer { Signpost.end("packetize_send", id: f.captureTimeMicros) }
         streamLock.lock()
         let active = streamActive
         let fec = currentFec

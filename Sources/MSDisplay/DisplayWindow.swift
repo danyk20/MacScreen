@@ -29,6 +29,8 @@ public final class DisplayWindow {
     public var overlayRootLayer: CALayer { rootLayer }
     public var onResize: ((CGSize) -> Void)?
     public var isVisible: Bool { window.isVisible }
+    /// Window frame in screen coordinates (the screen frame in full-screen mode).
+    public var frame: NSRect { window.frame }
 
     public var drawablePixelSize: CGSize {
         let b = view.bounds

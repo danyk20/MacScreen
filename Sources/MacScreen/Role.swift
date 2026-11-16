@@ -14,6 +14,8 @@ struct LaunchOptions {
     var connect: String?
     /// "embedded" (default) or "overlay" (`--cursor overlay`).
     var cursorMode: String = "embedded"
+    /// `--latency-csv <file>`: Display writes its per-frame latency CSV here on quit.
+    var latencyCSV: String?
 
     static let roleDefaultsKey = "role"
     private static let log = Logger(subsystem: "app.macscreen", category: "app")
@@ -24,6 +26,7 @@ struct LaunchOptions {
         var stats = false
         var connect: String?
         var cursorMode = "embedded"
+        var latencyCSV: String?
         var index = 0
         while index < args.count {
             let arg = args[index]
@@ -47,6 +50,11 @@ struct LaunchOptions {
                 }
             } else if arg.hasPrefix("--connect=") {
                 connect = String(arg.dropFirst("--connect=".count))
+            } else if arg == "--latency-csv", index + 1 < args.count {
+                latencyCSV = args[index + 1]
+                index += 1
+            } else if arg.hasPrefix("--latency-csv=") {
+                latencyCSV = String(arg.dropFirst("--latency-csv=".count))
             } else if arg == "--cursor", index + 1 < args.count {
                 cursorMode = args[index + 1] == "overlay" ? "overlay" : "embedded"
                 index += 1
@@ -67,6 +75,7 @@ struct LaunchOptions {
         } else if let stored = defaults.string(forKey: roleDefaultsKey) {
             role = Role(rawValue: stored)
         }
-        return LaunchOptions(role: role, windowed: windowed, stats: stats, connect: connect, cursorMode: cursorMode)
+        return LaunchOptions(role: role, windowed: windowed, stats: stats, connect: connect, cursorMode: cursorMode,
+                             latencyCSV: latencyCSV)
     }
 }

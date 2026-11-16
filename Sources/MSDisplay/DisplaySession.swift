@@ -18,6 +18,8 @@ public final class DisplaySession {
     fileprivate let queue = DispatchQueue(label: "ms.control.display", qos: .userInitiated)
     private var advertiser: DisplayAdvertiser?
     fileprivate var current: Link?
+    /// Capture->present latency and per-frame stage times (all connections of this session object).
+    public let latency = LatencyRecorder()
     private var busyLinks: [ObjectIdentifier: ControlChannel] = [:]
 
     public init(identityStore: IdentityStore, capabilities: CapabilitiesMessage, sink: DisplaySink) {
@@ -85,6 +87,7 @@ public final class DisplaySession {
         let store: IdentityStore
         let capabilities: CapabilitiesMessage
         let sink: DisplaySink
+        let latency: LatencyRecorder
         let channel: ControlChannel
         let mediaQueue = DispatchQueue(label: "ms.media.display", qos: .userInteractive)
         let decodeQueue = DispatchQueue(label: "ms.decode", qos: .userInteractive)
@@ -109,6 +112,7 @@ public final class DisplaySession {
         var highestDecoded: UInt32 = 0              // decode queue only
         var framesDropped: UInt32 = 0               // decode queue only
         var closed = false                          // decode queue only
+        var firstFragAt: [UInt32: UInt64] = [:]     // decode queue only: frameId -> first fragment arrival
 
         private let statLock = NSLock()
         private var framesDecoded: UInt32 = 0
@@ -121,6 +125,7 @@ public final class DisplaySession {
             self.store = owner.store
             self.capabilities = owner.capabilities
             self.sink = owner.sink
+            self.latency = owner.latency
         }
 
         func start() {
@@ -199,6 +204,9 @@ public final class DisplaySession {
                 self.framesDecoded &+= 1
                 self.decodeMsMean += (ms - self.decodeMsMean) / 8
                 self.statLock.unlock()
+                let now = MonoClock.nowMicros()
+                Signpost.end("decode", id: t)
+                self.latency.decodeDone(captureMicros: t, atMicros: now)
                 self.sink.present(pb, captureTimeMicros: t)
             }
             decoder = dec
@@ -254,9 +262,21 @@ public final class DisplaySession {
         func mediaPacket(_ type: PacketType, _ payload: Data) {
             switch type {
             case .videoData, .videoParity:
+                let arrived = MonoClock.nowMicros()
+                Signpost.begin("receive", id: UInt64(payload.count) &+ arrived)
+                defer { Signpost.end("receive", id: UInt64(payload.count) &+ arrived) }
                 guard let frag = try? VideoFragment.decode(payload) else { return }
                 decodeQueue.async { [weak self] in
                     guard let self = self, !self.closed else { return }
+                    if self.firstFragAt[frag.frameId] == nil {
+                        self.firstFragAt[frag.frameId] = arrived
+                        Signpost.begin("reassemble", id: UInt64(frag.frameId))
+                        if self.firstFragAt.count > 64 {
+                            for k in self.firstFragAt.keys.sorted().prefix(self.firstFragAt.count - 64) {
+                                self.firstFragAt[k] = nil
+                            }
+                        }
+                    }
                     self.process(self.reassembler.ingest(type: type, fragment: frag,
                                                          nowMicros: MonoClock.nowMicros(), rttMs: self.rttMs))
                 }
@@ -271,6 +291,7 @@ public final class DisplaySession {
             case .pong:
                 if let p = try? PongPacket.decode(payload) {
                     pingClock.handlePong(p, nowMicros: MonoClock.nowMicros())
+                    latency.setClockOffset(pingClock.offsetMicros)
                     let r = pingClock.rttMs
                     rttLock.lock(); rttValue = r; rttLock.unlock()
                 }
@@ -284,8 +305,15 @@ public final class DisplaySession {
             for e in events {
                 switch e {
                 case .frame(let id, let payload, let isKey, let captureT):
+                    let complete = MonoClock.nowMicros()
+                    Signpost.end("reassemble", id: UInt64(id))
+                    latency.frameComplete(frameId: id, captureMicros: captureT,
+                                          firstFragMicros: firstFragAt.removeValue(forKey: id) ?? complete,
+                                          completeMicros: complete)
                     do {
                         let f = try FramePayload.decode(payload, isKeyframe: isKey, captureTimeMicros: captureT)
+                        Signpost.begin("decode", id: captureT)
+                        latency.decodeStarted(captureMicros: captureT, atMicros: MonoClock.nowMicros())
                         try decoder?.decode(f)
                         highestDecoded = id
                         if isKey { wantsKeyframe = false }
