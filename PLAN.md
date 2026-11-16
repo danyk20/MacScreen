@@ -488,6 +488,12 @@ Format: **ID — title** · files · what to build · acceptance. All tasks also
   discover → handshake → (pair) → capabilities → sessionRequest/Accept → streaming →
   teardown. Keyframe-request recovery only (no NACK, FEC ratio from constants).
   *Accept:* loopback on this Mac with `--windowed` shows the virtual display live.
+  - Give `HostSession` a frame-source protocol with two implementations: virtual display + `ScreenCapturer`, and `TestPattern` (from MSProbe). Give `DisplaySession` a frame-sink protocol: `MetalRenderer` window, or a test sink. Add an in-process integration test (Host + Display over localhost with the test pattern) that needs no Screen Recording permission.
+  - Pairing: needed if the Host does not know the Display or `peerKnowsUs == false`. Host sends `pairRequest`, user types the code, Host compares, sends `pairConfirm`, Display asks "Allow?", replies `pairResult`. Until paired, the Display accepts only pairing messages and `bye`.
+  - Idle-screen recovery: the Host keeps the last captured pixel buffer. On a keyframe request with no new capture within 50 ms, or when feedback shows `highestDecodedFrame` behind the last sent frame for 200 ms, it re-encodes that buffer as a keyframe. The Display calls `Reassembler.forceKeyframeResync` when the decoder rejects a frame.
+  - Until T3.1 use the embedded cursor (`showsCursor = true`). No NACK handling until T3.2.
+  - One Display session at a time; a second Host gets `bye("busy")`.
+  - The Host opens UDP to `ControlChannel.remoteHost`.
 - **T2.11 — Minimal UI.** Role chooser, Host menu (list, connect, disconnect), pairing
   code screen and entry, permission guidance, stats overlay. *Accept:* loopback driven
   entirely from the UI. Then deploy to the iMac. **→ Gate G2.**
