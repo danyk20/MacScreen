@@ -16,6 +16,20 @@ private final class Locked<T> {
     func mutate(_ f: (inout T) -> Void) { lock.lock(); f(&value); lock.unlock() }
 }
 
+private final class PullingOutput: AudioOutput {
+    private let lock = NSLock()
+    private var render: AudioRenderCallback?
+    func start(render: @escaping AudioRenderCallback) throws { lock.lock(); self.render = render; lock.unlock() }
+    func stop() { lock.lock(); render = nil; lock.unlock() }
+    func pull(_ frames: Int) -> [Int16]? {
+        lock.lock(); defer { lock.unlock() }
+        guard let r = render else { return nil }
+        var out = [Int16](repeating: 0, count: frames * 2)
+        out.withUnsafeMutableBufferPointer { r($0.baseAddress!, frames) }
+        return out
+    }
+}
+
 /// Counting-pattern audio source (no CoreAudio, no microphone).
 private final class SyntheticAudioSource: AudioInputSource {
     private let queue = DispatchQueue(label: "test.audio.source")
@@ -78,7 +92,9 @@ private final class TestSink: DisplaySink {
     let cursorPackets = Locked<[CursorPacket]>([])
     let cursorImages = Locked<[CursorImageMessage]>([])
     let audio = Locked<[AudioPacket]>([])
-    func audioPacket(_ p: AudioPacket) { audio.mutate { $0.append(p) } }
+    var player: AudioPlayer?
+    func audioPacket(_ p: AudioPacket) { audio.mutate { $0.append(p) }; player?.enqueue(p) }
+
     func cursorPosition(_ p: CursorPacket) { cursorPackets.mutate { $0.append(p) } }
     func cursorImage(_ i: CursorImageMessage) { cursorImages.mutate { $0.append(i) } }
 
@@ -232,6 +248,41 @@ final class SessionIntegrationTests: XCTestCase {
         XCTAssertEqual(Set(seqs).count, seqs.count)
         XCTAssertEqual(seqs.first, 0)
         XCTAssertLessThanOrEqual(Int(seqs.last!) - seqs.count + 1, 3)
+    }
+
+    func testAudioReachesPlayerWithContinuousSamples() throws {
+        let hostStore = try makeStore("Host")
+        let sink = TestSink()
+        let out = PullingOutput()
+        let player = AudioPlayer(output: out, targetMs: 40)
+        sink.player = player
+        try player.start()
+        defer { player.stop() }
+        let (display, endpoint) = try startDisplay(try makeStore("Display"), sink: sink)
+        defer { display.stop() }
+        var cfg = hostConfig()
+        cfg.audioEnabled = true
+        cfg.makeAudioSource = { SyntheticAudioSource() }
+        let h = HostSession(identityStore: hostStore, capabilities: caps(role: "host", name: "H"),
+                            config: cfg, makeSource: { _ in TestPatternSource() })
+        sink.onCode = { h.submitPairingCode($0) }
+        h.connect(to: endpoint)
+        wait("audio packets") { sink.audio.get().count >= 60 }
+        // Pull 10 ms blocks at real rate; after the first non-silent block the stream must not contain gaps.
+        var started = false
+        var gaps = 0, played = 0
+        for _ in 0..<40 {
+            guard let b = out.pull(480) else { break }
+            let nonZero = b.filter { $0 != 0 }.count
+            if !started { started = nonZero > 0 }
+            if started { played += nonZero; if nonZero != b.count { gaps += 1 } }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        h.stop()
+        wait("end") { sink.ended.get() == 1 }
+        XCTAssertTrue(started)
+        XCTAssertGreaterThan(played, 0)
+        XCTAssertLessThanOrEqual(gaps, 1, "non-silent blocks must be continuous")
     }
 
     func testAudioOffSendsNoAudio() throws {

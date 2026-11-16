@@ -326,6 +326,7 @@ public final class DisplaySession {
                 if let p = try? PongPacket.decode(payload) {
                     pingClock.handlePong(p, nowMicros: MonoClock.nowMicros())
                     latency.setClockOffset(pingClock.offsetMicros)
+                    if let off = pingClock.offsetMicros { sink.hostClockOffset(off) }
                     let r = pingClock.rttMs
                     rttLock.lock(); rttValue = r; rttLock.unlock()
                 }

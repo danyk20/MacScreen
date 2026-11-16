@@ -19,6 +19,8 @@ public protocol DisplaySink: AnyObject {
     func hostState(_ state: HostStateMessage)
     /// Audio packet (media channel, may be reordered or lost). Default: ignored (AudioPlayer arrives in T5.3).
     func audioPacket(_ packet: AudioPacket)
+    /// Host clock minus Display clock in micros (PingClock offset), refreshed with every pong. Default: ignored.
+    func hostClockOffset(_ micros: Int64)
 }
 
 public extension DisplaySink {
@@ -26,4 +28,5 @@ public extension DisplaySink {
     func cursorPosition(_ packet: CursorPacket) {}
     func hostState(_ state: HostStateMessage) {}
     func audioPacket(_ packet: AudioPacket) {}
+    func hostClockOffset(_ micros: Int64) {}
 }

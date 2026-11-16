@@ -11,11 +11,18 @@ public final class RendererSink: DisplaySink {
     private let cursor = CursorLayer()
     public var onAskAllow: ((String, @escaping (Bool) -> Void) -> Void)?
 
-    public init(renderer: MetalRenderer, window: DisplayWindow) {
+    public let audio: AudioPlayer
+
+    public init(renderer: MetalRenderer, window: DisplayWindow, audioOutput: AudioOutput = EngineAudioOutput()) {
         self.renderer = renderer
         self.window = window
+        audio = AudioPlayer(output: audioOutput)
         cursor.attach(to: window.overlayRootLayer)
     }
+
+    public func audioPacket(_ packet: AudioPacket) { audio.enqueue(packet) }
+
+    public func hostClockOffset(_ micros: Int64) { audio.setClockOffset(micros) }
 
     public func cursorImage(_ image: CursorImageMessage) {
         DispatchQueue.main.async { [cursor] in cursor.add(image: image) }
@@ -54,6 +61,7 @@ public final class RendererSink: DisplaySink {
     }
 
     public func sessionStarted(hostName: String) {
+        do { try audio.start() } catch { /* no audio output; video continues */ }
         DispatchQueue.main.async { [window] in
             window.setBlank(false)
             window.showMessage(nil)
@@ -62,6 +70,7 @@ public final class RendererSink: DisplaySink {
     }
 
     public func sessionEnded() {
+        audio.stop()
         DispatchQueue.main.async { [window, cursor] in
             cursor.reset()
             window.setBlank(false)

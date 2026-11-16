@@ -10,6 +10,8 @@ final class AppSink: DisplaySink {
     private var code: (String, String)?
     init(_ inner: RendererSink) { self.inner = inner }
 
+    var audio: AudioPlayer { inner.audio }
+
     var currentCode: (code: String, host: String)? { lock.lock(); defer { lock.unlock() }; return code.map { ($0.0, $0.1) } }
 
     func present(_ pixelBuffer: CVPixelBuffer, captureTimeMicros: UInt64) { inner.present(pixelBuffer, captureTimeMicros: captureTimeMicros) }
@@ -29,6 +31,8 @@ final class AppSink: DisplaySink {
     func sessionStarted(hostName: String) { inner.sessionStarted(hostName: hostName); onConnected?() }
     func sessionEnded() { inner.sessionEnded(); onDisconnected?() }
     func hostState(_ state: HostStateMessage) { inner.hostState(state); onHostState?(state) }
+    func audioPacket(_ packet: AudioPacket) { inner.audioPacket(packet) }
+    func hostClockOffset(_ micros: Int64) { inner.hostClockOffset(micros) }
     func cursorImage(_ image: CursorImageMessage) { inner.cursorImage(image) }
     func cursorPosition(_ packet: CursorPacket) { inner.cursorPosition(packet) }
 }
@@ -122,7 +126,9 @@ final class DisplayController {
         let c = renderer.counters
         let fps = framesMeter.rate(c.framesDrawn)
         let l = session.latency.snapshot
-        return String(format: "Display  %.0f fps\nframes received %llu  drawn %llu  skipped %llu\nlatency p50 %.1f  p95 %.1f  max %.1f ms",
-                      fps, c.framesSubmitted, c.framesDrawn, c.framesSkipped, l.p50, l.p95, l.max)
+        return String(format: "Display  %.0f fps\nframes received %llu  drawn %llu  skipped %llu\nlatency p50 %.1f  p95 %.1f  max %.1f ms\naudio delay %@  fill %.0f ms  underruns %d",
+                      fps, c.framesSubmitted, c.framesDrawn, c.framesSkipped, l.p50, l.p95, l.max,
+                      sink.audio.audioDelayMs.map { String(format: "%.0f ms", $0) } ?? "-",
+                      sink.audio.fillMs, sink.audio.underruns)
     }
 }
