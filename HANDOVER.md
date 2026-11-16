@@ -42,7 +42,9 @@ Known gaps:
 
 T2.10a, T2.10 and T2.11 committed; all tests pass. Never run live yet: UI untested, DisplayCaptureSource
 (virtual display + ScreenCapturer) never captured, idle-screen recovery untested.
-Next: loopback run (ask user: make-dev-cert.sh, Screen Recording, confirm picture). Run commands:
+LOOPBACK CONFIRMED by user (2026-11-17): virtual display live in --windowed Display, window arrangement works, feels fast. Dev cert installed. Private repo danyk20/MacScreen pushed (HTTPS via gh); push after each task.
+T3.2, T3.3 committed; T3.4 in progress. Remaining M3: T3.1 cursor, T3.5, T3.6, then G2/G3 need iMac.
+(Old note: loopback run (ask user: make-dev-cert.sh, Screen Recording, confirm picture). Run commands:
 `build/MacScreen.app/Contents/MacOS/MacScreen --role display --windowed --stats` and
 `... --role host --stats`; in Host's "MS" menu choose Connect, type the code, Allow on the Display.
 Then: user wants a private GitHub repo under their profile created, committed and pushed at the end
