@@ -1,0 +1,30 @@
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "MacScreen",
+    platforms: [.macOS(.v12)],
+    products: [
+        .executable(name: "msprobe", targets: ["MSProbeCLI"]),
+        .executable(name: "MacScreen", targets: ["MacScreen"]),
+    ],
+    targets: [
+        .target(name: "CPrivateAPI", path: "Sources/CPrivateAPI"),
+        .target(name: "MSCore"),
+        .target(name: "MSProtocol", dependencies: ["MSCore"]),
+        .target(name: "MSTransport", dependencies: ["MSCore", "MSProtocol"]),
+        .target(name: "MSCodec", dependencies: ["MSCore"]),
+        .target(name: "MSProbe", dependencies: ["MSCore", "MSProtocol", "MSTransport", "MSCodec"]),
+        .target(name: "MSHost", dependencies: ["CPrivateAPI", "MSCore", "MSProtocol", "MSTransport", "MSCodec"]),
+        .target(name: "MSDisplay", dependencies: ["MSCore", "MSProtocol", "MSTransport", "MSCodec"]),
+        .executableTarget(name: "MSProbeCLI", dependencies: ["MSCore", "MSCodec", "MSProbe"]),
+        .executableTarget(name: "MacScreen", dependencies: [
+            "MSCore", "MSProtocol", "MSTransport", "MSCodec", "MSProbe", "MSHost", "MSDisplay",
+        ]),
+        .testTarget(name: "MSCoreTests", dependencies: ["MSCore"]),
+        .testTarget(name: "MSProtocolTests", dependencies: ["MSProtocol"]),
+        .testTarget(name: "MSTransportTests", dependencies: ["MSTransport"]),
+        .testTarget(name: "MSCodecTests", dependencies: ["MSCodec"]),
+        .testTarget(name: "MSProbeTests", dependencies: ["MSProbe"]),
+    ]
+)
