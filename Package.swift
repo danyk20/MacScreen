@@ -31,6 +31,7 @@ let package = Package(
         .testTarget(name: "MSIntegrationTests", dependencies: [
             "MSCore", "MSProtocol", "MSTransport", "MSCodec", "MSProbe", "MSHost", "MSDisplay",
         ]),
+        .testTarget(name: "MacScreenTests", dependencies: ["MacScreen"]),
         .testTarget(name: "MSDisplayTests", dependencies: ["MSDisplay", "MSProbe"]),
     ]
 )

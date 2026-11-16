@@ -15,9 +15,12 @@ public protocol DisplaySink: AnyObject {
     func cursorImage(_ image: CursorImageMessage)
     /// Latest cursor position (media channel, may be reordered or lost). Default: ignored.
     func cursorPosition(_ packet: CursorPacket)
+    /// Host state change (control channel). Default: ignored.
+    func hostState(_ state: HostStateMessage)
 }
 
 public extension DisplaySink {
     func cursorImage(_ image: CursorImageMessage) {}
     func cursorPosition(_ packet: CursorPacket) {}
+    func hostState(_ state: HostStateMessage) {}
 }

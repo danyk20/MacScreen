@@ -212,6 +212,14 @@ public final class HostSession {
         }
     }
 
+    /// Tells the Display about Host state changes (`hostState` control message). Safe from any thread.
+    public func sendHostState(displayAsleep: Bool, mirroring: Bool) {
+        queue.async { [self] in
+            guard !ended else { return }
+            channel?.send(.hostState(HostStateMessage(displayAsleep: displayAsleep, mirroring: mirroring)))
+        }
+    }
+
     public func stop() {
         queue.async { [self] in finish(.stopped) }
     }

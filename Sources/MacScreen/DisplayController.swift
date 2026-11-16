@@ -22,8 +22,13 @@ final class AppSink: DisplaySink {
         inner.hidePairingCode()
     }
     func askAllow(hostName: String, completion: @escaping (Bool) -> Void) { inner.askAllow(hostName: hostName, completion: completion) }
-    func sessionStarted(hostName: String) { inner.sessionStarted(hostName: hostName) }
-    func sessionEnded() { inner.sessionEnded() }
+    /// Lifecycle hooks for power management; called from internal queues.
+    var onConnected: (() -> Void)?
+    var onDisconnected: (() -> Void)?
+    var onHostState: ((HostStateMessage) -> Void)?
+    func sessionStarted(hostName: String) { inner.sessionStarted(hostName: hostName); onConnected?() }
+    func sessionEnded() { inner.sessionEnded(); onDisconnected?() }
+    func hostState(_ state: HostStateMessage) { inner.hostState(state); onHostState?(state) }
     func cursorImage(_ image: CursorImageMessage) { inner.cursorImage(image) }
     func cursorPosition(_ packet: CursorPacket) { inner.cursorPosition(packet) }
 }
@@ -37,6 +42,7 @@ final class DisplayController {
     private var overlay: StatsOverlay?
     private var framesMeter = RateMeter()
 
+    private let power = DisplayPowerController(assertions: IOKitPowerAssertions())
     private let latencyCSVPath: String?
 
     init(store: IdentityStore, caps: CapabilitiesMessage, windowed: Bool, stats: Bool,
@@ -53,6 +59,10 @@ final class DisplayController {
             done(r == .alertFirstButtonReturn)
         }
         sink = AppSink(rs)
+        let p = power
+        sink.onConnected = { DispatchQueue.main.async { p.hostConnected() } }
+        sink.onDisconnected = { DispatchQueue.main.async { p.hostDisconnected() } }
+        sink.onHostState = { s in DispatchQueue.main.async { p.hostStateChanged(displayAsleep: s.displayAsleep) } }
         session = DisplaySession(identityStore: store, capabilities: caps, sink: sink)
         let rec = session.latency
         renderer.onPresented = { capture, at in rec.presented(captureMicros: capture, atMicros: at) }
@@ -75,6 +85,7 @@ final class DisplayController {
     }
 
     func stop() {
+        power.hostDisconnected()
         session.stop()
         if let p = latencyCSVPath { try? session.latency.writeCSV(to: URL(fileURLWithPath: p)) }
     }

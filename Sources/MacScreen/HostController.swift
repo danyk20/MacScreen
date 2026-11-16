@@ -21,6 +21,7 @@ final class HostController: NSObject {
     private let cursorMode: String
     private var policy = ReconnectPolicy()
     private var reconnectGeneration = 0
+    private var sleepObservers: [NSObjectProtocol] = []
     var onChange: (() -> Void)?
 
     init(store: IdentityStore, caps: CapabilitiesMessage, stats: Bool, autoConnect: String? = nil,
@@ -40,6 +41,15 @@ final class HostController: NSObject {
             }
         }
         browser.start()
+        let nc = NSWorkspace.shared.notificationCenter
+        sleepObservers = [
+            nc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.session?.sendHostState(displayAsleep: true, mirroring: false)
+            },
+            nc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.session?.sendHostState(displayAsleep: false, mirroring: false)
+            },
+        ]
         if stats {
             overlay = StatsOverlay { [weak self] in self?.statsText() ?? "" }
             overlay?.show()
@@ -57,6 +67,8 @@ final class HostController: NSObject {
     }
 
     func stop() {
+        sleepObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+        sleepObservers = []
         session?.stop()
         browser.stop()
     }
@@ -174,6 +186,7 @@ final class HostController: NSObject {
         case .negotiating: update("Negotiating with \(name)")
         case .streaming:
             policy.sessionStreaming()
+            s.sendHostState(displayAsleep: false, mirroring: false)
             update("Streaming to \(name)")
         case .ended(let why):
             session = nil

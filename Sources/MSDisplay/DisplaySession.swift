@@ -170,6 +170,7 @@ public final class DisplaySession {
                 }
                 if case .sessionRequest(let req) = m { startStreaming(req) }
                 else if case .cursorImage(let ci) = m { sink.cursorImage(ci) }
+                else if case .hostState(let hs) = m { sink.hostState(hs) }
             }
         }
 

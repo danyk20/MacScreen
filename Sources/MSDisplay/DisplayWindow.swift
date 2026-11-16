@@ -107,6 +107,14 @@ public final class DisplayWindow {
         }
     }
 
+    /// Hides the video layer (black screen) while true; the message layer stays independent.
+    public func setBlank(_ blank: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        metalLayer.isHidden = blank
+        CATransaction.commit()
+    }
+
     public func showMessage(_ text: String?) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)

@@ -55,6 +55,11 @@ private struct SettingsView: View {
             Section(header: Text("General").font(.headline)) {
                 Toggle("Show stats overlay", isOn: $model.settings.statsOverlay)
                 Toggle("Launch at login", isOn: $model.settings.launchAtLogin)
+                    .onChange(of: model.settings.launchAtLogin) { on in
+                        guard role == .display else { return }
+                        let exe = Bundle.main.executablePath ?? CommandLine.arguments[0]
+                        try? LoginItem.set(on, executablePath: exe, in: LoginItem.defaultDirectory)
+                    }
             }
         }
         .padding(20)

@@ -25,6 +25,13 @@ public final class RendererSink: DisplaySink {
         DispatchQueue.main.async { [cursor] in cursor.update(packet) }
     }
 
+    public func hostState(_ state: HostStateMessage) {
+        DispatchQueue.main.async { [window] in
+            window.setBlank(state.displayAsleep)
+            window.showMessage(state.displayAsleep ? "Waiting for Host" : nil)
+        }
+    }
+
     public func present(_ pixelBuffer: CVPixelBuffer, captureTimeMicros: UInt64) {
         renderer.submit(pixelBuffer, captureTimeMicros: captureTimeMicros)
     }
@@ -48,6 +55,7 @@ public final class RendererSink: DisplaySink {
 
     public func sessionStarted(hostName: String) {
         DispatchQueue.main.async { [window] in
+            window.setBlank(false)
             window.showMessage(nil)
             window.show()
         }
@@ -56,6 +64,7 @@ public final class RendererSink: DisplaySink {
     public func sessionEnded() {
         DispatchQueue.main.async { [window, cursor] in
             cursor.reset()
+            window.setBlank(false)
             window.hide()
         }
     }
