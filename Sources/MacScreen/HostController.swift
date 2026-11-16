@@ -18,9 +18,12 @@ final class HostController: NSObject {
     private var overlay: StatsOverlay?
     /// Substring from `--connect`; consumed on first match so auto-connect never retries.
     private var pendingAutoConnect: String?
+    private let cursorMode: String
     var onChange: (() -> Void)?
 
-    init(store: IdentityStore, caps: CapabilitiesMessage, stats: Bool, autoConnect: String? = nil) {
+    init(store: IdentityStore, caps: CapabilitiesMessage, stats: Bool, autoConnect: String? = nil,
+         cursorMode: String = "embedded") {
+        self.cursorMode = cursorMode
         self.store = store
         self.caps = caps
         self.pendingAutoConnect = autoConnect
@@ -96,7 +99,9 @@ final class HostController: NSObject {
             Dialogs.screenRecordingGuidance()
             return
         }
-        let s = HostSession(identityStore: store, capabilities: caps) { peer in
+        var cfg = HostSessionConfig()
+        cfg.cursorMode = cursorMode
+        let s = HostSession(identityStore: store, capabilities: caps, config: cfg) { peer in
             DisplayCaptureSource(peer: peer, showsCursor: true)
         }
         s.onStateChange = { [weak self, weak s] st in

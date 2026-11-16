@@ -1,5 +1,6 @@
 import CoreVideo
 import Foundation
+import MSProtocol
 
 /// `DisplaySink` backed by `MetalRenderer` and `DisplayWindow`. Create on the main thread; the owner must
 /// have called `renderer.attach(layer:...)` with `window.metalLayer`.
@@ -7,11 +8,21 @@ public final class RendererSink: DisplaySink {
     private let renderer: MetalRenderer
     private let window: DisplayWindow
     /// Set by the app to show an "Allow?" prompt. Without it pairing is denied.
+    private let cursor = CursorLayer()
     public var onAskAllow: ((String, @escaping (Bool) -> Void) -> Void)?
 
     public init(renderer: MetalRenderer, window: DisplayWindow) {
         self.renderer = renderer
         self.window = window
+        cursor.attach(to: window.overlayRootLayer)
+    }
+
+    public func cursorImage(_ image: CursorImageMessage) {
+        DispatchQueue.main.async { [cursor] in cursor.add(image: image) }
+    }
+
+    public func cursorPosition(_ packet: CursorPacket) {
+        DispatchQueue.main.async { [cursor] in cursor.update(packet) }
     }
 
     public func present(_ pixelBuffer: CVPixelBuffer, captureTimeMicros: UInt64) {
@@ -43,6 +54,9 @@ public final class RendererSink: DisplaySink {
     }
 
     public func sessionEnded() {
-        DispatchQueue.main.async { [window] in window.hide() }
+        DispatchQueue.main.async { [window, cursor] in
+            cursor.reset()
+            window.hide()
+        }
     }
 }

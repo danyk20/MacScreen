@@ -17,7 +17,7 @@ private final class Locked<T> {
 }
 
 /// Synthetic frames at a fixed rate; needs no Screen Recording permission.
-private final class TestPatternSource: FrameSource {
+private class TestPatternSource: FrameSource {
     private let queue = DispatchQueue(label: "test.pattern.source")
     private var timer: DispatchSourceTimer?
     let started = Locked(0)
@@ -43,7 +43,28 @@ private final class TestPatternSource: FrameSource {
     }
 }
 
+/// Pattern source that also supports overlay cursor mode.
+private final class CursorTestSource: TestPatternSource, CursorAwareSource {
+    var showsCursor = true
+    var capturedDisplayID: CGDirectDisplayID? { 1 }
+}
+
+private final class FakeCursorSampler: CursorSampling {
+    private let n = Locked(0)
+    func location() -> CGPoint? { n.mutate { $0 += 1 }; return CGPoint(x: 10 + Double(n.get() % 50), y: 20) }
+    func isCursorVisible() -> Bool { true }
+    func currentShape() -> CursorShape? {
+        CursorShape(png: Data([7, 7, 7]), hotX: 1, hotY: 1, widthPt: 8, heightPt: 8)
+    }
+    func displayBounds() -> CGRect? { CGRect(x: 0, y: 0, width: 100, height: 100) }
+}
+
 private final class TestSink: DisplaySink {
+    let cursorPackets = Locked<[CursorPacket]>([])
+    let cursorImages = Locked<[CursorImageMessage]>([])
+    func cursorPosition(_ p: CursorPacket) { cursorPackets.mutate { $0.append(p) } }
+    func cursorImage(_ i: CursorImageMessage) { cursorImages.mutate { $0.append(i) } }
+
     let frames = Locked(0)
     let sizes = Locked<[Int]>([])
     let code = Locked<String?>(nil)
@@ -114,6 +135,49 @@ final class SessionIntegrationTests: XCTestCase {
     private func host(_ store: IdentityStore, _ src: FrameSource) -> HostSession {
         HostSession(identityStore: store, capabilities: caps(role: "host", name: "H"),
                     config: hostConfig(), makeSource: { _ in src })
+    }
+
+    func testOverlayCursorPacketsArrive() throws {
+        let hostStore = try makeStore("Host")
+        let displayStore = try makeStore("Display")
+        let sink = TestSink()
+        let (display, endpoint) = try startDisplay(displayStore, sink: sink)
+        defer { display.stop() }
+        let src = CursorTestSource()
+        var cfg = hostConfig()
+        cfg.cursorMode = "overlay"
+        cfg.makeCursorSampler = { _ in FakeCursorSampler() }
+        let h = HostSession(identityStore: hostStore, capabilities: caps(role: "host", name: "H"),
+                            config: cfg, makeSource: { _ in src })
+        sink.onCode = { h.submitPairingCode($0) }
+        h.connect(to: endpoint)
+        wait("cursor packets") { sink.cursorPackets.get().count >= 10 && !sink.cursorImages.get().isEmpty }
+        XCTAssertFalse(src.showsCursor, "overlay mode hides the embedded cursor")
+        let imgs = sink.cursorImages.get()
+        XCTAssertEqual(imgs.count, 1)
+        let p = sink.cursorPackets.get()
+        XCTAssertTrue(p.allSatisfy { $0.visible && $0.imageId == imgs[0].id })
+        XCTAssertTrue(p[0].x >= 0.1 && p[0].x < 0.6)
+        h.stop()
+        wait("end") { sink.ended.get() == 1 }
+    }
+
+    func testEmbeddedModeSendsNoCursor() throws {
+        let hostStore = try makeStore("Host")
+        let sink = TestSink()
+        let (display, endpoint) = try startDisplay(try makeStore("Display"), sink: sink)
+        defer { display.stop() }
+        let src = CursorTestSource()
+        var cfg = hostConfig()
+        cfg.makeCursorSampler = { _ in FakeCursorSampler() }
+        let h = HostSession(identityStore: hostStore, capabilities: caps(role: "host", name: "H"),
+                            config: cfg, makeSource: { _ in src })
+        sink.onCode = { h.submitPairingCode($0) }
+        h.connect(to: endpoint)
+        wait("frames") { sink.frames.get() >= 20 }
+        XCTAssertTrue(src.showsCursor)
+        XCTAssertTrue(sink.cursorPackets.get().isEmpty)
+        h.stop()
     }
 
     func testPairThenReconnectStreamsFrames() throws {

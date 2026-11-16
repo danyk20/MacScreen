@@ -1,5 +1,6 @@
 import CoreVideo
 import Foundation
+import MSProtocol
 
 /// Receives everything a `DisplaySession` wants to show. Called from internal queues; implementations hop as needed.
 public protocol DisplaySink: AnyObject {
@@ -10,4 +11,13 @@ public protocol DisplaySink: AnyObject {
     func askAllow(hostName: String, completion: @escaping (Bool) -> Void)
     func sessionStarted(hostName: String)
     func sessionEnded()
+    /// New cursor bitmap (control channel). Default: ignored.
+    func cursorImage(_ image: CursorImageMessage)
+    /// Latest cursor position (media channel, may be reordered or lost). Default: ignored.
+    func cursorPosition(_ packet: CursorPacket)
+}
+
+public extension DisplaySink {
+    func cursorImage(_ image: CursorImageMessage) {}
+    func cursorPosition(_ packet: CursorPacket) {}
 }

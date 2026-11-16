@@ -24,6 +24,8 @@ final class AppSink: DisplaySink {
     func askAllow(hostName: String, completion: @escaping (Bool) -> Void) { inner.askAllow(hostName: hostName, completion: completion) }
     func sessionStarted(hostName: String) { inner.sessionStarted(hostName: hostName) }
     func sessionEnded() { inner.sessionEnded() }
+    func cursorImage(_ image: CursorImageMessage) { inner.cursorImage(image) }
+    func cursorPosition(_ packet: CursorPacket) { inner.cursorPosition(packet) }
 }
 
 /// Display role: owns window, renderer and `DisplaySession`. Main thread only.

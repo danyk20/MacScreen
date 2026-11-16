@@ -164,6 +164,7 @@ public final class DisplaySession {
                     return
                 }
                 if case .sessionRequest(let req) = m { startStreaming(req) }
+                else if case .cursorImage(let ci) = m { sink.cursorImage(ci) }
             }
         }
 
@@ -259,6 +260,8 @@ public final class DisplaySession {
                     self.process(self.reassembler.ingest(type: type, fragment: frag,
                                                          nowMicros: MonoClock.nowMicros(), rttMs: self.rttMs))
                 }
+            case .cursor:
+                if let p = try? CursorPacket.decode(payload) { sink.cursorPosition(p) }
             case .ping:
                 if let p = try? PingPacket.decode(payload) {
                     let t1 = MonoClock.nowMicros()

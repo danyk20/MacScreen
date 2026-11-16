@@ -43,7 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let caps = LocalCapabilities.make(role: role, windowed: options.windowed, deviceName: store.identity.deviceName)
             switch role {
             case .host:
-                let h = HostController(store: store, caps: caps, stats: options.stats, autoConnect: options.connect)
+                let h = HostController(store: store, caps: caps, stats: options.stats, autoConnect: options.connect,
+                                   cursorMode: options.cursorMode)
                 h.onChange = { [weak self] in self?.rebuildMenu() }
                 host = h
             case .display:

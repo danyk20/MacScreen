@@ -12,6 +12,8 @@ struct LaunchOptions {
     var stats: Bool
     /// Case-insensitive name substring of the Display the Host should connect to automatically.
     var connect: String?
+    /// "embedded" (default) or "overlay" (`--cursor overlay`).
+    var cursorMode: String = "embedded"
 
     static let roleDefaultsKey = "role"
     private static let log = Logger(subsystem: "app.macscreen", category: "app")
@@ -21,6 +23,7 @@ struct LaunchOptions {
         var windowed = false
         var stats = false
         var connect: String?
+        var cursorMode = "embedded"
         var index = 0
         while index < args.count {
             let arg = args[index]
@@ -44,6 +47,11 @@ struct LaunchOptions {
                 }
             } else if arg.hasPrefix("--connect=") {
                 connect = String(arg.dropFirst("--connect=".count))
+            } else if arg == "--cursor", index + 1 < args.count {
+                cursorMode = args[index + 1] == "overlay" ? "overlay" : "embedded"
+                index += 1
+            } else if arg.hasPrefix("--cursor=") {
+                cursorMode = arg.dropFirst("--cursor=".count) == "overlay" ? "overlay" : "embedded"
             }
             index += 1
         }
@@ -59,6 +67,6 @@ struct LaunchOptions {
         } else if let stored = defaults.string(forKey: roleDefaultsKey) {
             role = Role(rawValue: stored)
         }
-        return LaunchOptions(role: role, windowed: windowed, stats: stats, connect: connect)
+        return LaunchOptions(role: role, windowed: windowed, stats: stats, connect: connect, cursorMode: cursorMode)
     }
 }

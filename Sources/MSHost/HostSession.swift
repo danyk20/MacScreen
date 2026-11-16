@@ -29,8 +29,10 @@ public enum HostSessionEnd: Equatable {
 public struct HostSessionConfig {
     public var fecRatio: Double = MSConstants.fecRatioWiFi
     public var hiDPI = true
-    /// "embedded" until T3.1.
+    /// "embedded" (cursor in the video) or "overlay" (separate cursor packets, T3.1).
     public var cursorMode = "embedded"
+    /// Test hook: replaces the system cursor sampler in overlay mode.
+    public var makeCursorSampler: ((CursorAwareSource) -> CursorSampling)?
     public var chooseFormat: (CapabilitiesMessage) -> VideoFormat = HostSessionConfig.defaultFormat
 
     public init() {}
@@ -76,6 +78,7 @@ public final class HostSession {
     private var fpsDivisor = 1             // guarded by streamLock; 2 after reconfigure to 30 fps
     private var captureTick = 0            // source thread only
     private var currentFec = 0.0           // guarded by streamLock
+    private var cursorTracker: CursorTracker?
     private var recoveryTimer: DispatchSourceTimer?
     private var pingTimer: DispatchSourceTimer?
     private let pingClock = PingClock()     // media queue only
@@ -265,6 +268,10 @@ public final class HostSession {
         startTimers()
         let src = makeSource(PeerInfo(deviceId: r.peerDeviceId, deviceName: r.peerDeviceName))
         source = src
+        if config.cursorMode == "overlay", let cs = src as? CursorAwareSource {
+            cs.showsCursor = false
+            startCursorTracker(for: cs)
+        }
         let hiDPI = config.hiDPI
         Task { [weak self] in
             do {
@@ -279,6 +286,16 @@ public final class HostSession {
                 self?.queue.async { self?.finish(.failure("source: \(error)")) }
             }
         }
+    }
+
+    private func startCursorTracker(for cs: CursorAwareSource) {
+        let sampler = config.makeCursorSampler?(cs)
+            ?? SystemCursorSampler(displayID: { [weak cs] in cs?.capturedDisplayID })
+        let t = CursorTracker(sampler: sampler, queue: queue,
+                              sendPosition: { [weak self] p in self?.media?.send(.cursor, p.encode()) },
+                              sendImage: { [weak self] m in self?.channel?.send(.cursorImage(m)) })
+        cursorTracker = t
+        t.start()
     }
 
     private func startTimers() {
@@ -444,6 +461,7 @@ public final class HostSession {
             // Pairing was never confirmed by the Display: forget the key we stored on a matching code.
             try? store.removePeer(identityKey: r.peerIdentityKey)
         }
+        cursorTracker?.stop(); cursorTracker = nil
         recoveryTimer?.cancel(); recoveryTimer = nil
         pingTimer?.cancel(); pingTimer = nil
         streamLock.lock()

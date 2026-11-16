@@ -1,3 +1,4 @@
+import CoreGraphics
 import CoreVideo
 import Foundation
 import MSCodec
@@ -18,4 +19,13 @@ public protocol FrameSource: AnyObject {
     func start(format: VideoFormat, hiDPI: Bool, display: CapabilitiesMessage,
                onFrame: @escaping (CVPixelBuffer, _ captureTimeMicros: UInt64) -> Void) async throws
     func stop() async
+}
+
+/// A source that can hide the system cursor in the capture and tell where the captured display lives,
+/// so `HostSession` can run overlay cursor mode (PLAN.md section 6.8).
+public protocol CursorAwareSource: FrameSource {
+    /// Set before `start`. False in "overlay" mode.
+    var showsCursor: Bool { get set }
+    /// The captured (virtual) display, once it exists. Any thread.
+    var capturedDisplayID: CGDirectDisplayID? { get }
 }

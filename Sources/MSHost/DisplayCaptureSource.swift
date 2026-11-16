@@ -8,13 +8,17 @@ import MSProtocol
 
 /// Virtual display plus `ScreenCapturer` (PLAN.md sections 6.2 and 6.3). Needs Screen Recording permission.
 @available(macOS 12.3, *)
-public final class DisplayCaptureSource: FrameSource {
+public final class DisplayCaptureSource: CursorAwareSource {
     public enum SourceError: Error { case virtualDisplay(String) }
 
     private struct Box<T>: @unchecked Sendable { let value: T }
 
     private let peer: PeerInfo
-    private let showsCursor: Bool
+    public var showsCursor: Bool
+    private let idLock = NSLock()
+    private var displayIDValue: CGDirectDisplayID?
+    public var capturedDisplayID: CGDirectDisplayID? { idLock.lock(); defer { idLock.unlock() }; return displayIDValue }
+    private func setDisplayID(_ id: CGDirectDisplayID?) { idLock.lock(); displayIDValue = id; idLock.unlock() }
     private var virtualDisplay: VirtualDisplay?
     private var capturer: ScreenCapturer?
 
@@ -42,6 +46,7 @@ public final class DisplayCaptureSource: FrameSource {
         }
         let vd = vdBox.value
         virtualDisplay = vd
+        setDisplayID(vd.displayID)
         let cap = ScreenCapturer(
             config: ScreenCapturer.Config(displayID: vd.displayID, pixelWidth: format.width,
                                           pixelHeight: format.height, fps: format.fps,
@@ -54,6 +59,7 @@ public final class DisplayCaptureSource: FrameSource {
     public func stop() async {
         if let c = capturer { await c.stop() }
         capturer = nil
+        setDisplayID(nil)
         let vdBox = virtualDisplay.map { Box(value: $0) }
         virtualDisplay = nil
         if let vdBox = vdBox {
