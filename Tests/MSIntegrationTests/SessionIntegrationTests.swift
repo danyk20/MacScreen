@@ -16,6 +16,21 @@ private final class Locked<T> {
     func mutate(_ f: (inout T) -> Void) { lock.lock(); f(&value); lock.unlock() }
 }
 
+/// Counting-pattern audio source (no CoreAudio, no microphone).
+private final class SyntheticAudioSource: AudioInputSource {
+    private let queue = DispatchQueue(label: "test.audio.source")
+    private var timer: DispatchSourceTimer?
+    func start(onSamples: @escaping (UnsafeRawBufferPointer) -> Void) throws {
+        let t = DispatchSource.makeTimerSource(queue: queue)
+        t.schedule(deadline: .now(), repeating: .milliseconds(5))
+        let chunk = [Int16](repeating: 100, count: 240 * 2)
+        t.setEventHandler { chunk.withUnsafeBytes { onSamples($0) } }
+        timer = t
+        t.resume()
+    }
+    func stop() { timer?.cancel(); timer = nil }
+}
+
 /// Synthetic frames at a fixed rate; needs no Screen Recording permission.
 private class TestPatternSource: FrameSource {
     private let queue = DispatchQueue(label: "test.pattern.source")
@@ -62,6 +77,8 @@ private final class FakeCursorSampler: CursorSampling {
 private final class TestSink: DisplaySink {
     let cursorPackets = Locked<[CursorPacket]>([])
     let cursorImages = Locked<[CursorImageMessage]>([])
+    let audio = Locked<[AudioPacket]>([])
+    func audioPacket(_ p: AudioPacket) { audio.mutate { $0.append(p) } }
     func cursorPosition(_ p: CursorPacket) { cursorPackets.mutate { $0.append(p) } }
     func cursorImage(_ i: CursorImageMessage) { cursorImages.mutate { $0.append(i) } }
 
@@ -190,6 +207,48 @@ final class SessionIntegrationTests: XCTestCase {
         XCTAssertTrue(p[0].x >= 0.1 && p[0].x < 0.6)
         h.stop()
         wait("end") { sink.ended.get() == 1 }
+    }
+
+    func testAudioPacketsArriveWithSequenceAndSize() throws {
+        let hostStore = try makeStore("Host")
+        let sink = TestSink()
+        let (display, endpoint) = try startDisplay(try makeStore("Display"), sink: sink)
+        defer { display.stop() }
+        var cfg = hostConfig()
+        cfg.audioEnabled = true
+        cfg.makeAudioSource = { SyntheticAudioSource() }
+        let h = HostSession(identityStore: hostStore, capabilities: caps(role: "host", name: "H"),
+                            config: cfg, makeSource: { _ in TestPatternSource() })
+        sink.onCode = { h.submitPairingCode($0) }
+        h.connect(to: endpoint)
+        wait("audio packets") { sink.audio.get().count >= 30 }
+        h.stop()
+        wait("end") { sink.ended.get() == 1 }
+        let p = sink.audio.get()
+        XCTAssertTrue(p.allSatisfy { $0.pcm.count == 960 })
+        // Loopback UDP does not reorder; sequence must be strictly increasing and (nearly) gapless.
+        let seqs = p.map { $0.seq }
+        XCTAssertEqual(seqs, seqs.sorted())
+        XCTAssertEqual(Set(seqs).count, seqs.count)
+        XCTAssertEqual(seqs.first, 0)
+        XCTAssertLessThanOrEqual(Int(seqs.last!) - seqs.count + 1, 3)
+    }
+
+    func testAudioOffSendsNoAudio() throws {
+        let hostStore = try makeStore("Host")
+        let sink = TestSink()
+        let (display, endpoint) = try startDisplay(try makeStore("Display"), sink: sink)
+        defer { display.stop() }
+        var cfg = hostConfig()
+        cfg.makeAudioSource = { SyntheticAudioSource() }
+        let h = HostSession(identityStore: hostStore, capabilities: caps(role: "host", name: "H"),
+                            config: cfg, makeSource: { _ in TestPatternSource() })
+        sink.onCode = { h.submitPairingCode($0) }
+        h.connect(to: endpoint)
+        wait("frames") { sink.frames.get() >= 10 }
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(sink.audio.get().isEmpty)
+        h.stop()
     }
 
     func testEmbeddedModeSendsNoCursor() throws {

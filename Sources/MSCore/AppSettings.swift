@@ -21,6 +21,10 @@ public struct AppSettings: Codable, Equatable {
     /// FEC ratio recommended by the setup test (PLAN 6.10); nil = link default.
     public var fecRatio: Double?
 
+    /// "Play sound on Display" (T5.2). Optional so settings stored before this field still decode.
+    public var playSoundOnDisplay: Bool?
+    public var playsSoundOnDisplay: Bool { playSoundOnDisplay ?? false }
+
     public init() {}
 
     public static let heightOptions = [0, 2160, 1440, 1080, 720]

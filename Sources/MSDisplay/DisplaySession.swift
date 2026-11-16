@@ -312,6 +312,8 @@ public final class DisplaySession {
                 }
             case .linkProbe:
                 probe.handleLinkPacket(payload)
+            case .audio:
+                if let p = try? AudioPacket.decode(payload) { sink.audioPacket(p) }
             case .cursor:
                 if let p = try? CursorPacket.decode(payload) { sink.cursorPosition(p) }
             case .ping:

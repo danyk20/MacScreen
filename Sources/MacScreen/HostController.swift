@@ -37,6 +37,8 @@ final class HostController: NSObject {
     private var asleep = false
     private let power = HostPowerController(assertions: IOKitSleepAssertions())
     private var probeSession: HostSession?
+    private let audioSwitcher = AudioOutputSwitcher(control: SystemAudioDevices())
+    private var sessionHasAudio = false
     private var probeWindow: ProbeProgressWindow?
     /// Called on main with the outcome of a setup test that produced a recommendation.
     var onRecommendation: ((ProbeOutcome) -> Void)?
@@ -134,6 +136,7 @@ final class HostController: NSObject {
         sleepObservers = []
         session?.stop()
         probeSession?.stop()
+        audioSwitcher.restore()
         power.setStreaming(false)
         browser.stop()
     }
@@ -187,6 +190,40 @@ final class HostController: NSObject {
         m.target = self
         m.state = mirror.wantsMirror ? .on : .off
         menu.addItem(m)
+        let a = NSMenuItem(title: "Play sound on Display", action: #selector(toggleSound), keyEquivalent: "")
+        a.target = self
+        a.state = AppSettings.load().playsSoundOnDisplay ? .on : .off
+        menu.addItem(a)
+    }
+
+    // MARK: Audio (T5.2)
+
+    /// Takes effect at the next connection (the request is part of session setup).
+    @objc private func toggleSound() {
+        var s = AppSettings.load()
+        if s.playsSoundOnDisplay {
+            s.playSoundOnDisplay = false
+            s.save()
+            if session == nil { audioSwitcher.restore() }
+        } else {
+            guard audioSwitcher.isDevicePresent else {
+                _ = Dialogs.alert("Audio driver not installed",
+                                  "Sound needs the MacScreen audio driver. Install it with Scripts/install-audio-driver.sh, then turn this option on again.")
+                return
+            }
+            s.playSoundOnDisplay = true
+            s.save()
+        }
+        onChange?()
+    }
+
+    /// Switches the default output when audio is active for this session; failures only cost the sound.
+    private func startAudioOutput() {
+        guard sessionHasAudio else { return }
+        do { try audioSwitcher.enable() } catch {
+            sessionHasAudio = false
+            Log.logger("audio").error("output switch failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     @objc private func showPermission() { Dialogs.screenRecordingGuidance() }
@@ -216,6 +253,8 @@ final class HostController: NSObject {
             return
         }
         var cfg = HostSessionConfig(settings: AppSettings.load())
+        sessionHasAudio = AppSettings.load().playsSoundOnDisplay && audioSwitcher.isDevicePresent
+        cfg.audioEnabled = sessionHasAudio
         if cursorMode == "overlay" { cfg.cursorMode = "overlay" }  // `--cursor overlay` wins over the stored setting
         let s = HostSession(identityStore: store, capabilities: caps, config: cfg) { peer in
             DisplayCaptureSource(peer: peer, showsCursor: true)
@@ -278,12 +317,15 @@ final class HostController: NSObject {
         case .streaming:
             policy.sessionStreaming()
             power.setStreaming(true)
+            startAudioOutput()
             if let id = s.capturedDisplayID { mirror.attach(displayID: id) }
             s.sendHostState(displayAsleep: false, mirroring: mirror.isMirroring)
             update("Streaming to \(name)")
         case .ended(let why):
             power.setStreaming(false)
             mirror.detach()
+            audioSwitcher.restore()
+            sessionHasAudio = false
             session = nil
             connectedTo = nil
             policy.sessionEnded(why, now: now())

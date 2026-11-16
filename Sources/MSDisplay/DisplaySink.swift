@@ -17,10 +17,13 @@ public protocol DisplaySink: AnyObject {
     func cursorPosition(_ packet: CursorPacket)
     /// Host state change (control channel). Default: ignored.
     func hostState(_ state: HostStateMessage)
+    /// Audio packet (media channel, may be reordered or lost). Default: ignored (AudioPlayer arrives in T5.3).
+    func audioPacket(_ packet: AudioPacket)
 }
 
 public extension DisplaySink {
     func cursorImage(_ image: CursorImageMessage) {}
     func cursorPosition(_ packet: CursorPacket) {}
     func hostState(_ state: HostStateMessage) {}
+    func audioPacket(_ packet: AudioPacket) {}
 }

@@ -39,6 +39,10 @@ public struct HostSessionConfig {
     public var maxBitrate: Int?
     /// Setup test: when set, the session runs the probe (PLAN 6.10) instead of streaming, then ends.
     public var probe: ProbeRunConfig?
+    /// Requests audio (PLAN 6.9) and captures it once streaming. Off by default.
+    public var audioEnabled = false
+    /// Test hook: replaces the AUHAL input on the "MacScreen Display" device.
+    public var makeAudioSource: (() -> AudioInputSource)?
 
     public init() {}
 
@@ -117,6 +121,7 @@ public final class HostSession {
     private var captureTick = 0            // source thread only
     private var currentFec = 0.0           // guarded by streamLock
     private var cursorTracker: CursorTracker?
+    private var audioCapture: AudioCapture?
     private var recoveryTimer: DispatchSourceTimer?
     private var pingTimer: DispatchSourceTimer?
     private let pingClock = PingClock()     // media queue only
@@ -302,7 +307,7 @@ public final class HostSession {
         let wire = WireVideoFormat(codec: f.codec.rawValue, width: f.width, height: f.height,
                                    fps: f.fps, bitDepth: f.bitDepth)
         channel?.send(.sessionRequest(SessionRequestMessage(format: wire, hiDPI: config.hiDPI,
-                                                            cursorMode: config.cursorMode, audio: false,
+                                                            cursorMode: config.cursorMode, audio: config.audioEnabled,
                                                             fecRatio: config.fecRatio)))
     }
 
@@ -396,6 +401,7 @@ public final class HostSession {
             cs.showsCursor = false
             startCursorTracker(for: cs)
         }
+        if config.audioEnabled { startAudio() }
         let hiDPI = config.hiDPI
         Task { [weak self] in
             do {
@@ -409,6 +415,18 @@ public final class HostSession {
             } catch {
                 self?.queue.async { self?.finish(.failure("source: \(error)")) }
             }
+        }
+    }
+
+    /// A missing driver or denied permission only costs the sound, never the session.
+    private func startAudio() {
+        let src = config.makeAudioSource?() ?? AUHALInputSource()
+        let cap = AudioCapture(source: src) { [weak self] p in self?.media?.send(.audio, p.encode()) }
+        do {
+            try cap.start()
+            audioCapture = cap
+        } catch {
+            Self.log.error("audio capture: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -591,6 +609,7 @@ public final class HostSession {
             try? store.removePeer(identityKey: r.peerIdentityKey)
         }
         cursorTracker?.stop(); cursorTracker = nil
+        audioCapture?.stop(); audioCapture = nil
         recoveryTimer?.cancel(); recoveryTimer = nil
         pingTimer?.cancel(); pingTimer = nil
         streamLock.lock()
