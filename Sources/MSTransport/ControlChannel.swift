@@ -30,6 +30,8 @@ public final class ControlChannel {
     public var onSecured: ((HandshakeResult) -> Void)?
     public var onMessage: ((ControlMessage) -> Void)?
     public var onClosed: ((ControlCloseReason) -> Void)?
+    /// Called with the peer's reason just before `onClosed(.peerClosed)` when the peer sent `bye`.
+    public var onPeerBye: ((String) -> Void)?
 
     private let securedLock = NSLock()
     private var securedFlag = false
@@ -91,7 +93,8 @@ public final class ControlChannel {
     }
 
     public func close(_ reason: ControlCloseReason = .localClose) {
-        queue.async { [weak self] in self?.finish(reason, sendBye: true) }
+        // Strong capture on purpose: the owner may drop its reference right after calling close().
+        queue.async { self.finish(reason, sendBye: true) }
     }
 
     // MARK: Lifecycle
@@ -172,6 +175,7 @@ public final class ControlChannel {
         connection.cancel()
         let cb = onClosed
         onClosed = nil
+        onPeerBye = nil
         onSecured = nil
         onMessage = nil
         hostHandshake = nil
@@ -278,7 +282,9 @@ public final class ControlChannel {
         }
         switch message {
         case .keepalive: break
-        case .bye: finish(.peerClosed, sendBye: false)
+        case .bye(let b):
+            onPeerBye?(b.reason)
+            finish(.peerClosed, sendBye: false)
         default: onMessage?(message)
         }
     }
