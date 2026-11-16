@@ -22,6 +22,16 @@ final class ScreenCapturerTests: XCTestCase {
         }
     }
 
+    /// ScreenCaptureKit lists only active displays: with the main display asleep or the
+    /// session locked it returns no displays and the capturer (correctly) throws displayNotFound.
+    private func requireCapturableMainDisplay() throws {
+        try requirePermission()
+        let main = CGMainDisplayID()
+        if CGDisplayIsAsleep(main) != 0 || CGDisplayIsActive(main) == 0 {
+            throw XCTSkip("Main display is asleep or inactive (screen locked?); nothing to capture")
+        }
+    }
+
     private func makeCapturer(_ box: Box, w: Int = 1280, h: Int = 720) -> ScreenCapturer {
         ScreenCapturer(config: .init(displayID: CGMainDisplayID(), pixelWidth: w, pixelHeight: h,
                                      fps: 60, showsCursor: false)) { pb, t in
@@ -54,7 +64,7 @@ final class ScreenCapturerTests: XCTestCase {
     }
 
     @MainActor func testCapturesFramesFromMainDisplay() async throws {
-        try requirePermission()
+        try requireCapturableMainDisplay()
         let box = Box()
         let cap = makeCapturer(box)
         try await cap.start()
@@ -83,7 +93,7 @@ final class ScreenCapturerTests: XCTestCase {
     }
 
     @MainActor func testUpdateChangesBufferSize() async throws {
-        try requirePermission()
+        try requireCapturableMainDisplay()
         let box = Box()
         let cap = makeCapturer(box)
         try await cap.start()
@@ -104,7 +114,7 @@ final class ScreenCapturerTests: XCTestCase {
     }
 
     @MainActor func testStopTwiceAndRestart() async throws {
-        try requirePermission()
+        try requireCapturableMainDisplay()
         let box = Box()
         let cap = makeCapturer(box)
         try await cap.start()
