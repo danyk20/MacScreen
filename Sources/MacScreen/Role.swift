@@ -10,6 +10,8 @@ struct LaunchOptions {
     var role: Role?
     var windowed: Bool
     var stats: Bool
+    /// Case-insensitive name substring of the Display the Host should connect to automatically.
+    var connect: String?
 
     static let roleDefaultsKey = "role"
     private static let log = Logger(subsystem: "app.macscreen", category: "app")
@@ -18,6 +20,7 @@ struct LaunchOptions {
         var roleArg: String?
         var windowed = false
         var stats = false
+        var connect: String?
         var index = 0
         while index < args.count {
             let arg = args[index]
@@ -34,6 +37,13 @@ struct LaunchOptions {
                 windowed = true
             } else if arg == "--stats" {
                 stats = true
+            } else if arg == "--connect" {
+                if index + 1 < args.count {
+                    connect = args[index + 1]
+                    index += 1
+                }
+            } else if arg.hasPrefix("--connect=") {
+                connect = String(arg.dropFirst("--connect=".count))
             }
             index += 1
         }
@@ -49,6 +59,6 @@ struct LaunchOptions {
         } else if let stored = defaults.string(forKey: roleDefaultsKey) {
             role = Role(rawValue: stored)
         }
-        return LaunchOptions(role: role, windowed: windowed, stats: stats)
+        return LaunchOptions(role: role, windowed: windowed, stats: stats, connect: connect)
     }
 }

@@ -16,16 +16,20 @@ final class HostController: NSObject {
     private var bytesMeter = RateMeter()
     private var framesMeter = RateMeter()
     private var overlay: StatsOverlay?
+    /// Substring from `--connect`; consumed on first match so auto-connect never retries.
+    private var pendingAutoConnect: String?
     var onChange: (() -> Void)?
 
-    init(store: IdentityStore, caps: CapabilitiesMessage, stats: Bool) {
+    init(store: IdentityStore, caps: CapabilitiesMessage, stats: Bool, autoConnect: String? = nil) {
         self.store = store
         self.caps = caps
+        self.pendingAutoConnect = autoConnect
         super.init()
         browser.onChange = { [weak self] list in
             DispatchQueue.main.async {
                 // Do not offer ourselves (windowed loopback uses a distinct id, so this only matters for shared stores).
                 self?.displays = list.filter { $0.id != store.identity.deviceId }
+                self?.tryAutoConnect()
                 self?.onChange?()
             }
         }
@@ -72,6 +76,18 @@ final class HostController: NSObject {
 
     @objc private func connect(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String, let d = displays.first(where: { $0.id == id }) else { return }
+        connect(to: d)
+    }
+
+    /// Auto-connects once to the first discovered Display whose name contains the `--connect` substring.
+    private func tryAutoConnect() {
+        guard let needle = pendingAutoConnect, session == nil else { return }
+        guard let d = displays.first(where: { $0.name.localizedCaseInsensitiveContains(needle) }) else { return }
+        pendingAutoConnect = nil
+        connect(to: d)
+    }
+
+    private func connect(to d: DiscoveredDisplay) {
         guard #available(macOS 12.3, *) else {
             _ = Dialogs.alert("macOS 12.3 or newer required", "Screen capture needs macOS 12.3 or newer on the Host.")
             return

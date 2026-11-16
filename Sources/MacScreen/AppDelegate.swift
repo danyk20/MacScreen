@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let r = role { UserDefaults.standard.set(r.rawValue, forKey: LaunchOptions.roleDefaultsKey) }
         }
         startRole()
+        if role != nil { NSApp.activate(ignoringOtherApps: true) }
         rebuildMenu()
         log.info("Launched with role \(self.role?.rawValue ?? "none", privacy: .public)")
     }
@@ -42,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let caps = LocalCapabilities.make(role: role, windowed: options.windowed, deviceName: store.identity.deviceName)
             switch role {
             case .host:
-                let h = HostController(store: store, caps: caps, stats: options.stats)
+                let h = HostController(store: store, caps: caps, stats: options.stats, autoConnect: options.connect)
                 h.onChange = { [weak self] in self?.rebuildMenu() }
                 host = h
             case .display:
