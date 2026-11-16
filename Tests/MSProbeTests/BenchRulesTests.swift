@@ -23,7 +23,7 @@ final class BenchRulesTests: XCTestCase {
 
     func testConstants() {
         XCTAssertEqual(BenchRules.warmupFrames, 10)
-        XCTAssertEqual(BenchRules.encodeP95Share, 0.5)
+        XCTAssertEqual(BenchRules.encodeP95Share, 0.85)
         XCTAssertEqual(BenchRules.decodeP95Share, 0.6)
         XCTAssertEqual(BenchRules.decodeThroughputFactor, 1.5)
     }

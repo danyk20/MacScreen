@@ -24,6 +24,8 @@ public enum CandidateLadder {
                 for codec in codecs {
                     let w = Int(Double(panelWidth) * scale) & ~1
                     let h = Int(Double(panelHeight) * scale) & ~1
+                    // Hardware H.264 cannot go beyond 4096x2304 (the M2 encoder returns no frames at 5K).
+                    if codec == .h264 && (w > 4096 || h > 2304) { continue }
                     let bpp = codec == .hevc ? MSConstants.bitsPerPixelHEVC : MSConstants.bitsPerPixelH264
                     let bitrate = Int(Double(w) * Double(h) * Double(fps) * bpp)
                     out.append(Candidate(

@@ -89,10 +89,15 @@ public final class VideoEncoder {
             return (s, st)
         }
 
-        var (created, status) = create(lowLatency: true)
+        // Measured on Apple M2 (macOS 27): with low-latency rate control the HEVC hardware encoder
+        // takes ~21 ms per 4K frame and rejects the speed-priority property; without it ~12 ms, still
+        // one frame in / one frame out. H.264 is the opposite: ~20 ms with it, ~75 ms without.
+        // So low-latency rate control is requested for H.264 only.
+        let wantLowLatency = format.codec == .h264
+        var (created, status) = create(lowLatency: wantLowLatency)
         if created != nil && status == noErr {
-            usesLowLatencyRateControl = true
-        } else {
+            usesLowLatencyRateControl = wantLowLatency
+        } else if wantLowLatency {
             Self.log.info("low-latency rate control session failed (\(status)); retrying without it")
             (created, status) = create(lowLatency: false)
             usesLowLatencyRateControl = false

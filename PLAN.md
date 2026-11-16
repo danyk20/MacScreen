@@ -241,9 +241,11 @@ final class VideoDecoder {
   func invalidate()
 }
 ```
-Encoder session: specification `RequireHardwareAcceleratedVideoEncoder = true` and
-`EnableLowLatencyRateControl = true`; if creation fails, retry once without the
-low-latency key. Properties: `RealTime = true`, `AllowFrameReordering = false`,
+Encoder session: specification `RequireHardwareAcceleratedVideoEncoder = true`; for
+**H.264 only** also `EnableLowLatencyRateControl = true` (retry once without it if creation
+fails). Measured on the M2 Host: HEVC takes ~21 ms per 4K frame with low-latency rate control
+and ~12 ms without (1440p ~6 ms, 1080p ~4.4 ms; 5K60 cannot keep up); H.264 takes ~20 ms with
+it and ~75 ms without. Properties: `RealTime = true`, `AllowFrameReordering = false`,
 `ProfileLevel` = `HEVC_Main_AutoLevel` / `HEVC_Main10_AutoLevel` / `H264_High_AutoLevel`,
 `AverageBitRate`, `ExpectedFrameRate = fps`, `MaxKeyFrameInterval = 36000`,
 `MaxFrameDelayCount = 0`, colour primaries/transfer/matrix = ITU-R 709,
@@ -379,9 +381,10 @@ Candidates are generated from the Display's panel pixel size `P`: scales
 variants are appended last. HiDPI is used when the scaled size is ≥ 0.75 × P.
 Profile bitrate = width × height × fps × bitsPerPixel(codec).
 1. Host: `EncodeBench` encodes 90 frames of `TestPattern` (scrolling text plus moving
-   gradient, deterministic) per candidate; pass if p95 encode time < 0.5 × frame interval.
+   gradient, deterministic) per candidate (first 10 frames excluded as warm-up); pass if p95 encode time < 0.85 × frame
+   interval. H.264 candidates above 4096×2304 are not generated (hardware limit).
 2. Each passing sample is sent as `probeBlob`. Display: `DecodeBench` decodes it paced at
-   the target fps; pass if p95 decode time < 0.6 × frame interval and unpaced throughput
+   the target fps (first 10 frames excluded); pass if p95 decode time < 0.6 × frame interval and unpaced throughput
    ≥ 1.5 × fps.
 3. `LinkProbe`: UDP trains of 0.5 s at 10, 20, 40, 80, 160 Mbit/s; usable throughput =
    highest rate with loss < 1 %.
