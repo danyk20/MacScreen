@@ -43,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startRole() {
         host?.stop(); host = nil
         display?.stop(); display = nil
+        settingsModel.onReconnect = nil
+        settingsModel.hostLive = false
         guard let role = role else { return }
         do {
             let store = try LocalIdentity.open(role: role, windowed: options.windowed)
@@ -51,7 +53,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .host:
                 let h = HostController(store: store, caps: caps, stats: options.stats || settingsModel.settings.statsOverlay, autoConnect: options.connect,
                                    cursorMode: options.cursorMode)
-                h.onChange = { [weak self] in self?.rebuildMenu() }
+                h.onChange = { [weak self, weak h] in
+                    guard let self = self else { return }
+                    self.settingsModel.hostLive = h?.isSessionActive ?? false
+                    self.rebuildMenu()
+                }
+                settingsModel.onReconnect = { [weak h] in h?.reconnect() }
                 h.onRecommendation = { [weak self] o in
                     guard let self = self else { return }
                     self.settingsModel.settings = o.recommendation.apply(to: self.settingsModel.settings,

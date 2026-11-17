@@ -28,6 +28,16 @@ public struct ReconnectPolicy: Equatable {
         attemptInFlight = false
     }
 
+    /// User chose Reconnect: the new attempt starts at once, without backoff, and auto-reconnect stays armed.
+    /// Call instead of `sessionEnded` for the stopped session.
+    public mutating func userReconnect(id: String) {
+        enabled = true
+        targetId = id
+        failures = 0
+        nextAllowedAt = 0
+        attemptInFlight = true
+    }
+
     public mutating func sessionStreaming() {
         failures = 0
     }

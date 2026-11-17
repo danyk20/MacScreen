@@ -33,6 +33,8 @@ final class HostController: NSObject {
     private var pendingAutoConnect: String?
     private let cursorMode: String
     private var policy = ReconnectPolicy()
+    /// Set by `reconnect()`: the session that ends next is followed by a new one to the same Display.
+    private var reconnectRequested = false
     private var reconnectGeneration = 0
     private var sleepObservers: [NSObjectProtocol] = []
     private let mirror = MirrorController()
@@ -186,6 +188,10 @@ final class HostController: NSObject {
             item.isEnabled = connected || (session == nil && probeSession == nil && linkCheck == nil)
             menu.addItem(item)
         }
+        let reconnectItem = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "")
+        reconnectItem.target = self
+        reconnectItem.isEnabled = isSessionActive && !reconnectRequested
+        menu.addItem(reconnectItem)
         let setup = NSMenuItem(title: "Run setup test", action: nil, keyEquivalent: "")
         let idle = session == nil && probeSession == nil
         if displays.count == 1 {
@@ -414,6 +420,21 @@ final class HostController: NSObject {
         session?.stop()
     }
 
+    /// True while a session object exists (connecting, negotiating or streaming).
+    var isSessionActive: Bool { session != nil }
+
+    /// Stops the current session the way Disconnect does, then connects to the same Display again with the
+    /// current settings. Auto-reconnect stays armed and no backoff applies. Also used by Settings "Apply & Reconnect".
+    @objc func reconnect() {
+        guard let s = session, !reconnectRequested, !asleep else { return }
+        Self.log.notice("reconnect requested")
+        reconnectRequested = true
+        reconnectGeneration += 1
+        mirror.detach()
+        update("Reconnecting\u{2026}")
+        s.stop()
+    }
+
     private func now() -> Double { Double(MonoClock.nowMicros()) / 1_000_000 }
 
     /// Reconnects when the Display is seen again and the backoff has elapsed; otherwise schedules a re-check.
@@ -463,8 +484,22 @@ final class HostController: NSObject {
             mirror.detach()
             audioSwitcher.restore()
             sessionHasAudio = false
+            let rejoin = reconnectRequested ? connectedTo : nil
+            reconnectRequested = false
             session = nil
             connectedTo = nil
+            if let d = rejoin, !asleep {
+                // Reconnect: the old session's bye is already sent; start the new one right away.
+                policy.userReconnect(id: d.id)
+                connect(to: d)
+                if session == nil && linkCheck == nil {
+                    // Could not start (for example Screen Recording lost): fall back to the normal backoff path.
+                    policy.sessionEnded(.failure("reconnect could not start"), now: now())
+                    update("Reconnecting\u{2026}")
+                    evaluateReconnect()
+                }
+                return
+            }
             policy.sessionEnded(why, now: now())
             let willRetry = policy.enabled
             update(willRetry ? "Reconnecting\u{2026}" : "Disconnected")

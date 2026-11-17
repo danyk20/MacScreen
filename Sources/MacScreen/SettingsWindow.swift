@@ -11,6 +11,10 @@ final class SettingsModel: ObservableObject {
         }
     }
     var onChange: ((AppSettings) -> Void)?
+    /// True while the Host has a session (connecting or streaming). Set by the app from the Host controller.
+    @Published var hostLive = false
+    /// Set by the app to the Host controller's reconnect action; nil when not in the Host role.
+    var onReconnect: (() -> Void)?
 
     init() { settings = AppSettings.load() }
 }
@@ -26,6 +30,13 @@ private struct SettingsView: View {
     var body: some View {
         Form {
             if role == .host {
+                if model.hostLive {
+                    Section {
+                        Text("Changes apply after reconnecting")
+                            .font(.caption).foregroundColor(.secondary)
+                        Button("Apply & Reconnect") { model.onReconnect?() }
+                    }
+                }
                 Section(header: Text("Video").font(.headline)) {
                     Picker("Resolution", selection: $model.settings.maxHeight) {
                         ForEach(AppSettings.heightOptions, id: \.self) { Text(heightLabel($0)).tag($0) }

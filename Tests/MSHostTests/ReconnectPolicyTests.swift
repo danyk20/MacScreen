@@ -45,6 +45,19 @@ final class ReconnectPolicyTests: XCTestCase {
         XCTAssertTrue(p.shouldReconnect(seenIds: ["d"], now: 5))
     }
 
+    func testUserReconnectKeepsAutoReconnectWithoutBackoff() {
+        var p = ReconnectPolicy()
+        p.userConnect(id: "d")
+        p.sessionStreaming()
+        p.userReconnect(id: "d")
+        XCTAssertTrue(p.enabled)
+        XCTAssertEqual(p.nextAllowedAt, 0)
+        XCTAssertFalse(p.shouldReconnect(seenIds: ["d"], now: 0), "attempt in flight")
+        p.sessionEnded(.closed(.peerClosed), now: 0)
+        XCTAssertTrue(p.enabled)
+        XCTAssertTrue(p.shouldReconnect(seenIds: ["d"], now: 1.5))
+    }
+
     func testPairingFailuresDisable() {
         var p = ReconnectPolicy()
         p.userConnect(id: "d")
