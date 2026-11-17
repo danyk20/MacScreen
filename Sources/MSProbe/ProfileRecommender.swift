@@ -12,12 +12,49 @@ public struct LinkTrainResult: Codable, Equatable {
     public var sent: Int
     public var received: Int
     public var jitterMs: Double
+    /// Rate at which the train actually arrived (bytes received / arrival span), if measured.
+    /// Provisional decision P1: on a deep-buffered link (hotspot) a train above capacity is queued, not
+    /// dropped, so loss alone over-states throughput; the arrival rate does not.
+    public var deliveryBps: Int?
+    /// How much longer the train took to arrive than to send (ms): queueing in the path. nil = not measured.
+    public var stretchMs: Double?
 
-    public init(rateBps: Int, sent: Int, received: Int, jitterMs: Double) {
+    public init(rateBps: Int, sent: Int, received: Int, jitterMs: Double, deliveryBps: Int? = nil,
+                stretchMs: Double? = nil) {
         self.rateBps = rateBps
         self.sent = sent
         self.received = received
         self.jitterMs = jitterMs
+        self.deliveryBps = deliveryBps
+        self.stretchMs = stretchMs
+    }
+
+    /// Arrival span minus the send span of the packets received (ms).
+    public static func stretchMs(received: Int, sent: Int, durationMs: Int, firstArrivalMicros: UInt64,
+                                 lastArrivalMicros: UInt64) -> Double? {
+        guard received >= 8, sent > 1, lastArrivalMicros > firstArrivalMicros else { return nil }
+        let span = Double(lastArrivalMicros - firstArrivalMicros) / 1000
+        return span - Double(durationMs) * Double(received - 1) / Double(sent)
+    }
+
+    /// Arrival rate from the Display's first/last arrival stamps; nil when too few packets for a span.
+    public static func deliveryBps(received: Int, firstArrivalMicros: UInt64, lastArrivalMicros: UInt64,
+                                   packetBytes: Int) -> Int? {
+        guard received >= 8, lastArrivalMicros > firstArrivalMicros else { return nil }
+        let span = Double(lastArrivalMicros - firstArrivalMicros) / 1e6
+        return Int(Double((received - 1) * packetBytes * 8) / span)
+    }
+
+    /// The rate this train shows the link can carry: the offered rate, or less if it arrived slower.
+    public var effectiveBps: Int {
+        guard let d = deliveryBps, d > 0 else { return rateBps }
+        return Swift.min(rateBps, d)
+    }
+
+    /// The link could not keep up with this train (loss, or it arrived clearly slower than offered).
+    public var saturated: Bool {
+        loss >= LinkResult.maxUsableLoss || Double(effectiveBps) < LinkResult.saturationShare * Double(rateBps)
+            || (stretchMs ?? 0) > LinkResult.maxStretchMs
     }
 
     public var loss: Double {
@@ -29,14 +66,30 @@ public struct LinkTrainResult: Codable, Equatable {
 /// Outcome of the UDP trains (PLAN section 6.10 step 3).
 public struct LinkResult: Codable, Equatable {
     public static let maxUsableLoss = 0.01
+    /// A train delivered below this share of its offered rate counts as saturated.
+    public static let saturationShare = 0.8
+    /// A train that arrives this much later than it was sent has hit a queue (RTT inflation).
+    public static let maxStretchMs = 80.0
 
     public var trains: [LinkTrainResult]
 
     public init(trains: [LinkTrainResult]) { self.trains = trains }
 
-    /// Highest train rate with loss below 1 %; 0 if none.
+    /// Highest usable rate over the trains with loss below 1 %; 0 if none. The lowest train counts at its
+    /// offered rate (a short Wi-Fi stall stretches its arrival span without meaning anything); each faster
+    /// train counts at its measured arrival rate (`effectiveBps`), but never below the next slower train's rate.
     public var usableThroughputBps: Int {
-        trains.filter { $0.loss < Self.maxUsableLoss }.map { $0.rateBps }.max() ?? 0
+        let sorted = trains.sorted { $0.rateBps < $1.rateBps }
+        var best = 0
+        for (i, t) in sorted.enumerated() where t.loss < Self.maxUsableLoss {
+            best = Swift.max(best, i == 0 ? t.rateBps : Swift.max(sorted[i - 1].rateBps, t.effectiveBps))
+        }
+        return best
+    }
+
+    /// The automatic link check stops here: loss, or (after the first train) clearly slower arrival than offered.
+    public static func shouldStop(after t: LinkTrainResult, index: Int) -> Bool {
+        t.loss >= maxUsableLoss || (index > 0 && t.saturated)
     }
 
     /// Loss of the train that defines `usableThroughputBps` (0 if there is none).
@@ -80,12 +133,12 @@ public struct Recommendation: Codable {
 /// Pure decision function of PLAN section 6.10 step 4.
 public enum ProfileRecommender {
     public static func recommend(outcomes: [CandidateOutcome], link: LinkResult?,
-                                 interface: LinkInterface) -> Recommendation {
+                                 interface: LinkInterface, requireBenchmarks: Bool = true) -> Recommendation {
         let throughput = link?.usableThroughputBps ?? 0
         var rejections: [Rejection] = []
         var chosen: Candidate?
         for o in outcomes {
-            if let reason = rejectionReason(o, link: link) {
+            if let reason = rejectionReason(o, link: link, requireBenchmarks: requireBenchmarks) {
                 rejections.append(Rejection(candidate: o.candidate, reason: reason))
             } else if chosen == nil {
                 chosen = o.candidate
@@ -117,7 +170,7 @@ public enum ProfileRecommender {
     }
 
     /// nil = the candidate passes every rule.
-    static func rejectionReason(_ o: CandidateOutcome, link: LinkResult?) -> String? {
+    static func rejectionReason(_ o: CandidateOutcome, link: LinkResult?, requireBenchmarks: Bool = true) -> String? {
         let f = o.candidate.format
         let interval = 1000.0 / Double(Swift.max(f.fps, 1))
         if let s = o.skipReason { return s }
@@ -132,6 +185,7 @@ public enum ProfileRecommender {
                               Double(o.candidate.minBitrate) / 1e6, budget / 1e6)
             }
         }
+        if !requireBenchmarks && o.encode == nil && o.decode == nil { return nil }
         guard let enc = o.encode else { return "encode benchmark not run" }
         if enc.frames == 0 || !enc.passed {
             return "encode failed: \(enc.failureReason ?? "no frames")"
@@ -152,6 +206,30 @@ public enum ProfileRecommender {
                           BenchRules.decodeThroughputFactor * Double(f.fps))
         }
         return nil
+    }
+}
+
+/// Provisional decision P1 (PLAN 6.10): link-only recommendation used automatically at connect time.
+/// Encode/decode benchmarks are not run (G1 measured that every HEVC ladder step passes on M2 -> iMac 5K);
+/// only the link budget decides the step. HEVC only when both ends support it in hardware.
+public enum LinkAwareProfile {
+    public static func candidates(panelWidth: Int, panelHeight: Int, hevc: Bool) -> [Candidate] {
+        let all = CandidateLadder.make(panelWidth: panelWidth, panelHeight: panelHeight).filter { !$0.manualOnly }
+        let hevcOnly = all.filter { $0.format.codec == .hevc }
+        return hevc && !hevcOnly.isEmpty ? hevcOnly : all
+    }
+
+    public static func recommend(panelWidth: Int, panelHeight: Int, hevc: Bool, link: LinkResult,
+                                 interface: LinkInterface) -> Recommendation {
+        let outcomes = candidates(panelWidth: panelWidth, panelHeight: panelHeight, hevc: hevc)
+            .map { CandidateOutcome(candidate: $0) }
+        return ProfileRecommender.recommend(outcomes: outcomes, link: link, interface: interface,
+                                            requireBenchmarks: false)
+    }
+
+    /// Bitrate ceiling from a measured link: 0.6 x usable throughput (never below the global floor).
+    public static func bitrateCap(throughputBps: Int) -> Int {
+        Swift.max(MSConstants.minBitrate, Int(MSConstants.linkBudgetShare * Double(throughputBps)))
     }
 }
 

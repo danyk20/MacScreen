@@ -563,6 +563,39 @@ changes): 3840x2160@60, 3200x1800@60, 2560x1440@60, 3840x2160@30, 3200x1800@30, 
 (3840x2160@60, then 3200x1800@60). 5K at 30 fps is manual-only ("5K 30 (static work)"); 5K60 is not reachable (M2 encoder).
 Facts: iMac hardware decode p95 HEVC 5K60 7.69 ms, 4K60 4.66 ms; H.264 2560x1440@60 is not hardware-decoded.
 
+**Provisional decision P1 (2026-11-17, Opus, to be reviewed by Fable).** Made because Fable was out of credits;
+tuning only, no wire-format change, HEVC kept, every part reversible. Trigger: live Host M2 -> 5K iMac over a
+hotspot-like Wi-Fi link sustaining ~15-20 Mbit/s; the G1 default (4K60, 30 Mbit/s profile) was used blindly, the
+router queued up to 2.5 s of RTT, ~137 gaps >50 ms per 60 s, each 450-650 KB keyframe cost ~0.3 s.
+1. *Automatic link check on every connection* (Host, `HostController.runLinkCheck`; user requirement: never
+   skipped because of a cache): after the secure handshake/pairing and before the stream, a separate setup-test
+   connection runs link trains only (10/20/40/80/160 Mbit/s, 0.25 s each, ascending; status "Measuring link...";
+   cut off 5 s after negotiation; ~2.2 s measured live). It stops at the first train with >= 1 % loss, or (after
+   the first train) arrival below 0.8 x the offered rate or an arrival span > 80 ms longer than the send span
+   (queueing / RTT inflation). Usable throughput = highest loss-free train, the first counted at its offered
+   rate, faster ones at their measured arrival rate (`LinkTrainResult.deliveryBps`, first/last arrival stamps)
+   but not below the next slower train's rate (a deep router queue delays instead of dropping, so loss alone
+   over-states throughput; a Wi-Fi stall can stretch one short train). `LinkAwareProfile` then applies 6.10
+   step 4 to the HEVC ladder without encode/decode benchmarks (G1 showed all HEVC steps pass on this pair):
+   first step whose 0.04 bpp bitrate fits 0.6 x throughput. ~18 Mbit/s -> 2560x1440@60, ~25 -> 3200x1800@60,
+   >= ~33 -> 3840x2160@60. The result is stored in `ProbeCache` with the default gateway (`networkId`); a cached
+   result is used only when the live check fails, only for the same gateway and < 7 days old, scaled x0.75
+   and logged as FALLBACK; otherwise the G1 defaults apply.
+2. Session: start bitrate = min(profile, 0.6 x throughput), and `RateController.throughputCapBps` (ramp-up
+   ceiling) is that same cap. The FEC default from the check is used unless Settings store one.
+3. User override wins: if Settings maxHeight/fps/codec differ from the defaults, that format is used (link cap
+   still applies); a Settings bitrate cap disables the link cap. Disable the whole check with
+   `defaults write app.macscreen.MacScreen msAutoLinkProbe -bool NO`.
+4. Display measures RFC 3550 interarrival jitter per frame (capture time vs first-fragment arrival,
+   `InterarrivalJitter`) and sends it in `FeedbackPacket.jitterMs` (was always 0). Because Wi-Fi shows
+   several ms even when idle, the RateController jitter thresholds move from 5/10 ms to 10/25 ms (good/bad);
+   queueing delay from RTT stays the congestion signal.
+5. Keyframes get +0.10 FEC (cap 0.30) on top of the current ratio (`RateController.frameFecRatio`): ~10 %
+   more keyframe bytes instead of a lost keyframe + re-request.
+Open for Fable: intra-refresh or LTR instead of full keyframes on loss (architecture), a Display jitter
+buffer / present pacing for the remaining p95, and whether the link check should also re-run on a sustained
+queueing-delay back-off.
+
 ## 10. Verification
 
 - **Every task:** `swift build`, `swift test`, zero warnings in touched files.

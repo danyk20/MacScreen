@@ -6,6 +6,7 @@ import MSHost
 import MSProbe
 import MSProtocol
 import MSTransport
+import Network
 
 /// Placeholder for probe-only sessions, which never start a source.
 private final class NoFrameSource: FrameSource {
@@ -41,6 +42,16 @@ final class HostController: NSObject {
     private let audioSwitcher = AudioOutputSwitcher(control: SystemAudioDevices())
     private var sessionHasAudio = false
     private var probeWindow: ProbeProgressWindow?
+    /// Automatic link check before streaming (Provisional decision P1). Off: `defaults write
+    /// app.macscreen.MacScreen msAutoLinkProbe -bool NO` (or `-msAutoLinkProbe NO`).
+    private let autoLinkProbe = UserDefaults.standard.object(forKey: "msAutoLinkProbe") == nil
+        || UserDefaults.standard.bool(forKey: "msAutoLinkProbe")
+    private var linkCheck: HostSession?
+    private var linkCheckGeneration = 0
+    private let pathMonitor = NWPathMonitor()
+    private var currentInterface: LinkInterface = .other
+    /// Default gateway of the current path; identifies the network for the link-check cache.
+    private var currentNetworkId: String?
     /// Called on main with the outcome of a setup test that produced a recommendation.
     var onRecommendation: ((ProbeOutcome) -> Void)?
     var onChange: (() -> Void)?
@@ -62,6 +73,13 @@ final class HostController: NSObject {
             }
         }
         browser.start()
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let i: LinkInterface = path.usesInterfaceType(.wiredEthernet) ? .wired
+                : path.usesInterfaceType(.wifi) ? .wifi : .other
+            let gw = path.gateways.first.map { "\($0)" }
+            DispatchQueue.main.async { self?.currentInterface = i; self?.currentNetworkId = gw }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "ms.path"))
         let nc = NSWorkspace.shared.notificationCenter
         sleepObservers = [
             nc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
@@ -137,6 +155,8 @@ final class HostController: NSObject {
         sleepObservers = []
         session?.stop()
         probeSession?.stop()
+        linkCheck?.stop()
+        pathMonitor.cancel()
         audioSwitcher.restore()
         power.setStreaming(false)
         browser.stop()
@@ -163,7 +183,7 @@ final class HostController: NSObject {
                                   action: connected ? #selector(disconnect) : #selector(connect(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = d.id
-            item.isEnabled = connected || (session == nil && probeSession == nil)
+            item.isEnabled = connected || (session == nil && probeSession == nil && linkCheck == nil)
             menu.addItem(item)
         }
         let setup = NSMenuItem(title: "Run setup test", action: nil, keyEquivalent: "")
@@ -186,6 +206,7 @@ final class HostController: NSObject {
         }
         setup.isEnabled = idle && !displays.isEmpty
         menu.addItem(setup)
+
         menu.addItem(.separator())
         let m = NSMenuItem(title: "Mirror Main Display", action: #selector(toggleMirror), keyEquivalent: "")
         m.target = self
@@ -237,7 +258,7 @@ final class HostController: NSObject {
 
     /// Auto-connects once to the first discovered Display whose name contains the `--connect` substring.
     private func tryAutoConnect() {
-        guard let needle = pendingAutoConnect, session == nil else { return }
+        guard let needle = pendingAutoConnect, session == nil, linkCheck == nil else { return }
         guard let d = displays.first(where: { $0.name.localizedCaseInsensitiveContains(needle) }) else { return }
         pendingAutoConnect = nil
         policy.userConnect(id: d.id)
@@ -254,7 +275,120 @@ final class HostController: NSObject {
             Dialogs.screenRecordingGuidance()
             return
         }
-        var cfg = HostSessionConfig(settings: AppSettings.load())
+        guard session == nil, linkCheck == nil else { return }
+        if !autoLinkProbe { startStream(to: d, link: nil); return }
+        runLinkCheck(d)
+    }
+
+    // MARK: Automatic link check (Provisional decision P1, PLAN 6.10)
+
+    /// Link trains only (~2-5 s, capped at 8 s after negotiation), cached per (Display, interface); then streams.
+    private func runLinkCheck(_ d: DiscoveredDisplay) {
+        var cfg = HostSessionConfig()
+        var run = HostSessionConfig.linkCheckRun()
+        let hevc = caps.hwEncodeHEVC
+        run.onFinished = { [weak self] result in
+            DispatchQueue.main.async { self?.linkCheckFinished(result, display: d, hevc: hevc) }
+        }
+        cfg.probe = run
+        let s = HostSession(identityStore: store, capabilities: caps, config: cfg) { _ in NoFrameSource() }
+        linkCheckGeneration += 1
+        let gen = linkCheckGeneration
+        var negotiated = false
+        s.onStateChange = { [weak self, weak s] st in
+            DispatchQueue.main.async {
+                guard let self = self, let s = s, s === self.linkCheck, gen == self.linkCheckGeneration else { return }
+                switch st {
+                case .negotiating:
+                    negotiated = true
+                    self.update("Measuring link to \(d.name)\u{2026}")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self, weak s] in
+                        guard let self = self, gen == self.linkCheckGeneration, s === self.linkCheck else { return }
+                        Self.log.notice("link check: timeout, using defaults")
+                        s?.stop()
+                    }
+                case .ended(let why):
+                    // Success and timeout both continue in linkCheckFinished; handle the rest here.
+                    switch why {
+                    case .stopped:
+                        // Normally linkCheckFinished already ran (onFinished comes first). After a timeout it
+                        // follows shortly; if the user cancelled pairing, nothing follows: go idle.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak s] in
+                            guard let self = self, let s = s, s === self.linkCheck else { return }
+                            if negotiated {
+                                self.linkCheckFinished(.failure(ProbeFailure("stopped")), display: d, hevc: hevc)
+                            } else {
+                                self.linkCheck = nil
+                                self.linkCheckGeneration += 1
+                                self.update("Idle")
+                            }
+                        }
+                    case .pairingCodeMismatch, .pairingDenied:
+                        self.linkCheck = nil
+                        self.linkCheckGeneration += 1
+                        self.handleLinkCheckAbort(why, name: d.name)
+                    default:
+                        self.linkCheckFinished(.failure(ProbeFailure("\(why)")), display: d, hevc: hevc)
+                    }
+                default: break
+                }
+            }
+        }
+        s.onPairingCodeRequired = { [weak self, weak s] in
+            DispatchQueue.main.async { if let s = s { self?.askForCode(s, displayName: d.name) } }
+        }
+        linkCheck = s
+        s.connect(to: d.endpoint)
+        update("Measuring link to \(d.name)\u{2026}")
+    }
+
+    private func linkCheckFinished(_ result: Result<ProbeOutcome, ProbeFailure>, display d: DiscoveredDisplay, hevc: Bool) {
+        guard linkCheck != nil else { return }
+        linkCheck = nil
+        linkCheckGeneration += 1
+        var measured: ProbeOutcome?
+        switch result {
+        case .success(let o) where o.link.usableThroughputBps > 0:
+            var out = HostSessionConfig.linkOnlyOutcome(o, hevc: hevc)
+            out.networkId = currentNetworkId
+            ProbeCache.store(out)
+            measured = out
+        case .success:
+            Self.log.notice("link check: no usable rate measured")
+        case .failure(let f):
+            Self.log.notice("link check failed (\(f.message, privacy: .public))")
+        }
+        let cached = ProbeCache.load(displayId: d.id, interface: currentInterface)
+        let (link, fallback) = HostSessionConfig.resolveLink(measured: measured, cached: cached,
+                                                             networkId: currentNetworkId)
+        if let out = link {
+            let f = out.recommendation.candidate?.format
+            Self.log.notice("link check\(fallback ? " FALLBACK (cached x0.75)" : "", privacy: .public): \(out.link.usableThroughputBps) bit/s over \(out.interface.rawValue, privacy: .public) gw \(out.networkId ?? "?", privacy: .public) -> \(f.map { "\($0.width)x\($0.height)@\($0.fps)" } ?? "none", privacy: .public) trains=\(out.link.trains.map { "\($0.rateBps / 1_000_000):\($0.received)/\($0.sent):\(($0.deliveryBps ?? 0) / 1_000_000):\(Int($0.stretchMs ?? -1))ms" }.joined(separator: ","), privacy: .public)")
+        } else {
+            Self.log.notice("link check: no measurement and no cached result for this network, using G1 defaults")
+        }
+        // The Display needs a moment to finish the probe connection before the stream connects.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self = self, self.session == nil, !self.asleep else { return }
+            self.startStream(to: d, link: link)
+        }
+    }
+
+    private func handleLinkCheckAbort(_ why: HostSessionEnd, name: String) {
+        policy.userDisconnect()
+        update("Disconnected")
+        switch why {
+        case .pairingCodeMismatch: _ = Dialogs.alert("MacScreen", "The pairing code did not match.")
+        case .pairingDenied: _ = Dialogs.alert("MacScreen", "\(name) did not allow this Mac.")
+        default: break
+        }
+    }
+
+    private func startStream(to d: DiscoveredDisplay, link: ProbeOutcome?) {
+        guard #available(macOS 12.3, *) else { return }
+        let settings = AppSettings.load()
+        var cfg = HostSessionConfig(settings: settings)
+        if let o = link { cfg.applyLink(o, settings: settings) }
         sessionHasAudio = AppSettings.load().playsSoundOnDisplay && audioSwitcher.isDevicePresent
         cfg.audioEnabled = sessionHasAudio
         if cursorMode == "overlay" { cfg.cursorMode = "overlay" }  // `--cursor overlay` wins over the stored setting
@@ -284,7 +418,7 @@ final class HostController: NSObject {
 
     /// Reconnects when the Display is seen again and the backoff has elapsed; otherwise schedules a re-check.
     private func evaluateReconnect() {
-        guard session == nil, let wait = policy.waitTime(now: now()) else { return }
+        guard session == nil, linkCheck == nil, let wait = policy.waitTime(now: now()) else { return }
         guard let id = policy.targetId, displays.contains(where: { $0.id == id }) else { return }
         if policy.shouldReconnect(seenIds: displays.map { $0.id }, now: now()),
            let d = displays.first(where: { $0.id == id }) {

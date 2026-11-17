@@ -11,6 +11,8 @@ public struct ProbeOutcome: Codable {
     public var link: LinkResult
     public var outcomes: [CandidateOutcome]
     public var recommendation: Recommendation
+    /// Network the measurement was made on (default gateway), so a different network is measured again (P1).
+    public var networkId: String?
 
     public init(displayId: String, displayName: String, interface: LinkInterface, panelWidth: Int,
                 panelHeight: Int, date: Date = Date(), link: LinkResult, outcomes: [CandidateOutcome],
@@ -50,6 +52,12 @@ public enum ProbeCache {
     }
 
     /// Most recent cached result for a Display, over all interface types.
+    public static func remove(displayId: String, from defaults: UserDefaults = .standard) {
+        var all = (defaults.dictionary(forKey: defaultsKey) as? [String: Data]) ?? [:]
+        for i in LinkInterface.allCases { all[key(displayId: displayId, interface: i)] = nil }
+        defaults.set(all, forKey: defaultsKey)
+    }
+
     public static func latest(displayId: String, from defaults: UserDefaults = .standard) -> ProbeOutcome? {
         LinkInterface.allCases.compactMap { load(displayId: displayId, interface: $0, from: defaults) }
             .max { $0.date < $1.date }

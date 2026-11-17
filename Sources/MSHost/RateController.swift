@@ -17,8 +17,11 @@ public struct RateController {
     public static let startShare = 0.6
     public static let rampUpFactor = 1.05
     public static let backoffFactor = 0.8
-    public static let jitterGoodMs = 5.0
-    public static let jitterBadMs = 10.0
+    /// Display-measured RFC 3550 interarrival jitter of video frames. Provisional decision P1: PLAN 6.6 said
+    /// 5 / 10 ms, but Wi-Fi shows several ms of jitter even when idle; queueing delay (RTT) is the
+    /// congestion signal, jitter only catches heavy contention.
+    public static let jitterGoodMs = 10.0
+    public static let jitterBadMs = 25.0
     public static let fecRaiseLoss = 0.02
     public static let fecLowerLoss = 0.002
     public static let fecLowerAfterMicros: UInt64 = 10_000_000
@@ -31,6 +34,16 @@ public struct RateController {
     public static let queueDelayGoodMs = 30.0
     /// The RTT baseline drifts up by this much per evaluation so a route change is relearned.
     public static let baseRttDriftMs = 0.5
+
+    /// Provisional decision P1: keyframes get this much extra FEC (capped at fecRatioMax). A lost keyframe
+    /// costs a re-request plus another 450-650 KB (~0.3 s on a 15-20 Mbit/s Wi-Fi link); +0.10 parity on
+    /// the keyframe alone costs ~0.03 s and lets the Display rebuild most losses without a NACK round trip.
+    public static let keyframeFecExtra = 0.10
+
+    /// FEC ratio for one frame: the current ratio, raised for keyframes.
+    public static func frameFecRatio(_ base: Double, isKeyframe: Bool) -> Double {
+        isKeyframe ? min(MSConstants.fecRatioMax, base + keyframeFecExtra) : base
+    }
 
     public let profileBitrate: Int
     /// The link default: FEC never drops below this.
@@ -49,14 +62,22 @@ public struct RateController {
     private var prevFramesLost = false
     private var baseRttMs: Double?
 
-    public init(profileBitrate: Int, linkFecRatio: Double) {
+    /// `throughputCapBps`: 0.6 x measured throughput (P1). When given, the start bitrate is
+    /// min(profile, cap) (PLAN 6.10 step 4) and the cap is the ceiling for ramp-up.
+    public init(profileBitrate: Int, linkFecRatio: Double, throughputCapBps: Int? = nil) {
         self.profileBitrate = max(MSConstants.minBitrate, profileBitrate)
         self.minFecRatio = min(max(linkFecRatio, 0), MSConstants.fecRatioMax)
-        self.bitrate = max(MSConstants.minBitrate, Int(Double(self.profileBitrate) * Self.startShare))
+        self.throughputCapBps = throughputCapBps.map { max(MSConstants.minBitrate, $0) }
+        if let cap = self.throughputCapBps {
+            self.initialBitrate = min(self.profileBitrate, cap)
+        } else {
+            self.initialBitrate = max(MSConstants.minBitrate, Int(Double(self.profileBitrate) * Self.startShare))
+        }
+        self.bitrate = initialBitrate
         self.fecRatio = self.minFecRatio
     }
 
-    public var initialBitrate: Int { max(MSConstants.minBitrate, Int(Double(profileBitrate) * Self.startShare)) }
+    public let initialBitrate: Int
 
     /// Returns the new settings when an evaluation ran and something changed, else nil.
     /// `rttMs`: the Host's smoothed RTT to the Display, if known (delay-based congestion signal; the

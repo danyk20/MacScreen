@@ -172,12 +172,17 @@ public final class ControlChannel {
            let body = try? ControlMessage.bye(ByeMessage(reason: "\(reason)")).encodeBody(),
            let sealed = try? sealer.seal(body) {
             let frame = ControlFramer.frame(typeCode: ControlMessage.bye(ByeMessage(reason: "")).typeCode, body: sealed)
-            connection.send(content: frame, completion: .contentProcessed { _ in })
+            // Cancel only after the bye has been handed to TCP: cancelling right away dropped it, and the
+            // Display then held the link as busy until its 5 s control timeout (P1 live run, 2026-11-17).
+            let conn = connection
+            conn.send(content: frame, completion: .contentProcessed { _ in conn.cancel() })
+            queue.asyncAfter(deadline: .now() + 0.5) { conn.cancel() }
+        } else {
+            connection.cancel()
         }
         timer?.cancel()
         timer = nil
         connection.stateUpdateHandler = nil
-        connection.cancel()
         let cb = onClosed
         onClosed = nil
         onPeerBye = nil

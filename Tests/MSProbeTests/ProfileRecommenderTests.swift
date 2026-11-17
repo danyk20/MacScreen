@@ -208,4 +208,56 @@ final class ProfileRecommenderTests: XCTestCase {
         XCTAssertEqual(res?.jitterMs ?? 1, 0, accuracy: 1e-9)   // exactly nominal spacing 25 ms
         XCTAssertNil(rx.finish(5))
     }
+
+    // Provisional decision P1: link-only recommendation at connect time.
+    func testLinkAwareProfileOnEighteenMegabitLink() {
+        // 5K iMac panel; the 20 and 30 Mbit/s trains arrive at only ~18 Mbit/s (deep router queue, no loss).
+        let l = LinkResult(trains: [
+            LinkTrainResult(rateBps: 10_000_000, sent: 416, received: 416, jitterMs: 1, deliveryBps: 10_100_000),
+            LinkTrainResult(rateBps: 20_000_000, sent: 833, received: 833, jitterMs: 4, deliveryBps: 18_000_000),
+            LinkTrainResult(rateBps: 30_000_000, sent: 1250, received: 1200, jitterMs: 9, deliveryBps: 18_000_000),
+        ])
+        XCTAssertEqual(l.usableThroughputBps, 18_000_000)
+        XCTAssertFalse(l.trains[0].saturated)
+        XCTAssertFalse(l.trains[1].saturated)    // 18 >= 0.8 x 20
+        XCTAssertTrue(l.trains[2].saturated)
+        // A Wi-Fi stall stretching the first (slowest) train does not stop the check or lower the result.
+        let stalled = LinkTrainResult(rateBps: 10_000_000, sent: 416, received: 416, jitterMs: 1, deliveryBps: 7_100_000)
+        XCTAssertFalse(LinkResult.shouldStop(after: stalled, index: 0))
+        XCTAssertTrue(LinkResult.shouldStop(after: l.trains[2], index: 2))
+        XCTAssertEqual(LinkResult(trains: [stalled]).usableThroughputBps, 10_000_000)
+        // RTT inflation: a train arriving > 80 ms later than it was sent is saturated even without loss.
+        let queued = LinkTrainResult(rateBps: 40_000_000, sent: 1041, received: 1041, jitterMs: 1,
+                                     deliveryBps: 39_000_000, stretchMs: 120)
+        XCTAssertTrue(LinkResult.shouldStop(after: queued, index: 2))
+        XCTAssertEqual(LinkTrainResult.stretchMs(received: 101, sent: 101, durationMs: 250, firstArrivalMicros: 0,
+                                                 lastArrivalMicros: 350_000)!, 350 - 250.0 * 100 / 101, accuracy: 0.01)
+        let r = LinkAwareProfile.recommend(panelWidth: 5120, panelHeight: 2880, hevc: true, link: l, interface: .wifi)
+        let f = try! XCTUnwrap(r.candidate).format
+        XCTAssertEqual(f.codec, .hevc)
+        XCTAssertEqual(f.fps, 60)
+        XCTAssertLessThanOrEqual(f.height, 1800)
+        XCTAssertEqual(f.width, 2560)            // budget 10.8: 3200x1800 needs 13.8 at 0.04 bpp
+        XCTAssertEqual(r.bitrate, 10_800_000)    // min(profile, 0.6 x 18)
+        XCTAssertEqual(LinkAwareProfile.bitrateCap(throughputBps: 18_000_000), 10_800_000)
+        // A fast link keeps the G1 default.
+        let fastLink = LinkResult(trains: [LinkTrainResult(rateBps: 80_000_000, sent: 100, received: 100, jitterMs: 1)])
+        XCTAssertEqual(LinkAwareProfile.recommend(panelWidth: 5120, panelHeight: 2880, hevc: true, link: fastLink,
+                                                  interface: .wifi).candidate?.format.width, 3840)
+        // ~25 Mbit/s lands on 3200x1800@60.
+        let mid = LinkResult(trains: [LinkTrainResult(rateBps: 30_000_000, sent: 100, received: 100, jitterMs: 1,
+                                                      deliveryBps: 25_000_000)])
+        XCTAssertEqual(LinkAwareProfile.recommend(panelWidth: 5120, panelHeight: 2880, hevc: true, link: mid,
+                                                  interface: .wifi).candidate?.format.width, 3200)
+    }
+
+    func testDeliveryRateFromArrivalSpan() {
+        XCTAssertNil(LinkTrainResult.deliveryBps(received: 3, firstArrivalMicros: 0, lastArrivalMicros: 1000, packetBytes: 1200))
+        // 1001 packets of 1200 B over 0.5 s -> 19.2 Mbit/s.
+        XCTAssertEqual(LinkTrainResult.deliveryBps(received: 1001, firstArrivalMicros: 1_000, lastArrivalMicros: 501_000,
+                                                   packetBytes: 1200), 19_200_000)
+        // Old cached results without the field still decode.
+        let json = #"{"rateBps":10,"sent":1,"received":1,"jitterMs":0}"#.data(using: .utf8)!
+        XCTAssertNil(try JSONDecoder().decode(LinkTrainResult.self, from: json).deliveryBps)
+    }
 }

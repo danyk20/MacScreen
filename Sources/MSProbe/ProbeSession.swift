@@ -21,6 +21,8 @@ public struct ProbeRunConfig {
     public var encodeFrames = 90
     public var trainRatesBps = LinkProbe.defaultRatesBps
     public var trainDurationMs = LinkProbe.defaultTrainDurationMs
+    /// Skip the remaining (faster) trains once one is saturated (automatic link check, P1).
+    public var stopWhenSaturated = false
     /// Called on a background thread.
     public var onProgress: ((ProbeProgress) -> Void)?
     /// Called once on a background thread.
@@ -139,9 +141,20 @@ public final class ProbeHostDriver {
             progress(String(format: "Measuring link at %d Mbit/s", rate / 1_000_000))
             let msg = LinkProbe.startMessage(trainId: UInt32(10 + i), rateBps: rate, durationMs: config.trainDurationMs)
             let r = runTrain(msg)
-            trains.append(LinkTrainResult(rateBps: rate, sent: msg.packetCount, received: r?.received ?? 0,
-                                          jitterMs: r?.jitterMs ?? 0))
+            let delivery = r.flatMap {
+                LinkTrainResult.deliveryBps(received: $0.received, firstArrivalMicros: $0.firstArrivalMicros,
+                                            lastArrivalMicros: $0.lastArrivalMicros,
+                                            packetBytes: MSConstants.fragmentSize)
+            }
+            let stretch = r.flatMap {
+                LinkTrainResult.stretchMs(received: $0.received, sent: msg.packetCount, durationMs: msg.durationMs,
+                                          firstArrivalMicros: $0.firstArrivalMicros, lastArrivalMicros: $0.lastArrivalMicros)
+            }
+            let t = LinkTrainResult(rateBps: rate, sent: msg.packetCount, received: r?.received ?? 0,
+                                    jitterMs: r?.jitterMs ?? 0, deliveryBps: delivery, stretchMs: stretch)
+            trains.append(t)
             done += 1
+            if config.stopWhenSaturated && LinkResult.shouldStop(after: t, index: i) { break }
         }
         let link = LinkResult(trains: trains)
 

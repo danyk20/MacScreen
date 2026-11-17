@@ -61,8 +61,8 @@ final class RateControllerTests: XCTestCase {
     }
 
     func testHighJitterBacksOffMidJitterHolds() {
-        XCTAssertEqual(second(jitter: 11)?.bitrate, 19_200_000)
-        XCTAssertNil(second(jitter: 7))
+        XCTAssertEqual(second(jitter: 26)?.bitrate, 19_200_000)
+        XCTAssertNil(second(jitter: 15))
     }
 
     func testRecoveryRampsUpSlowlyAndCaps() {
@@ -122,5 +122,28 @@ final class RateControllerTests: XCTestCase {
         for _ in 0..<60 { if second(framesLost: 1)?.switchTo30fps == true { switches += 1 } }
         XCTAssertEqual(switches, 1)
         XCTAssertTrue(rc.fpsReduced)
+    }
+
+    func testLinkCapSetsStartAndCeiling() {
+        // P1: 18 Mbit/s measured -> cap 10.8; start = min(profile, cap), ramp-up never above it.
+        var r = RateController(profileBitrate: 40_000_000, linkFecRatio: 0.1, throughputCapBps: 10_800_000)
+        XCTAssertEqual(r.initialBitrate, 10_800_000)
+        XCTAssertEqual(r.bitrate, 10_800_000)
+        func fb(_ n: UInt32) -> FeedbackPacket {
+            FeedbackPacket(highestDecodedFrame: n, framesDecoded: n, framesDropped: 0, fragsReceived: n * 100,
+                           fragsLost: 0, fragsRecovered: 0, avgDecodeMs: 1, jitterMs: 2, requestKeyframe: false)
+        }
+        for i in 0..<20 { _ = r.ingest(fb(UInt32(i)), nowMicros: UInt64(i) * 1_000_000) }
+        XCTAssertEqual(r.bitrate, 10_800_000)
+        // A cap above the profile starts at the profile.
+        XCTAssertEqual(RateController(profileBitrate: 8_000_000, linkFecRatio: 0, throughputCapBps: 50_000_000).initialBitrate,
+                       8_000_000)
+    }
+
+    func testKeyframeFecBump() {
+        XCTAssertEqual(RateController.frameFecRatio(0.10, isKeyframe: false), 0.10)
+        XCTAssertEqual(RateController.frameFecRatio(0.10, isKeyframe: true), 0.20, accuracy: 1e-9)
+        XCTAssertEqual(RateController.frameFecRatio(0.0, isKeyframe: true), 0.10, accuracy: 1e-9)
+        XCTAssertEqual(RateController.frameFecRatio(0.25, isKeyframe: true), MSConstants.fecRatioMax)
     }
 }

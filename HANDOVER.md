@@ -56,6 +56,19 @@ Other settings: msRenderDrawables (2), msRenderStreamSize (off). Next: wired/5GH
 wired CSV, tearing check (G2 decision). Bug fixed: Allow alert hidden behind full-screen Display window.
 iMac state: app in ~/Applications/MacScreen.app (user osx, ssh alias iMac5K), not running.
 
+### Session 2026-11-17 (later): live tuning on the iMac
+- Fable is out of usage credits until Sun Nov 22 03:00. Provisional decision P1 (Opus) in PLAN.md after the G1
+  note needs Fable review. Pending Fable questions: intra-refresh/LTR vs Display jitter buffer; re-measure
+  mid-session; jitter thresholds 10/25 ms; G3 (needs wired CSV), G4 (driver), G5 (HDR).
+- Link is now measured on EVERY connection (HostController.runLinkCheck, ~2 s, 'Measuring link...'); cache only
+  as FALLBACK keyed by gateway. On Beachclub Wi-Fi: 37-40 Mbit/s measured, 4K60 at 22-24 Mbit/s, presented
+  55-56 fps, capture->present p50 59-63 / p95 ~140 ms. Encoder (27 ms/4K frame, 2 in flight) is the fps limit;
+  3200x1800@60 would likely hit a steady 60 (untested, user may want it as Wi-Fi default).
+- Not tested live: final rebuild with `msAutoLinkProbe NO` switch, FALLBACK path, pairing during the check,
+  tearing check with vsync off (restore: defaults write app.macscreen.MacScreen msRenderVsync -bool YES).
+- Fixed: ControlChannel bye-before-cancel bug (Display stayed 'busy' ~5 s after Host stop).
+- Keychain: click 'Always Allow' on the codesign prompt to stop repeated password prompts.
+
 ### Pending decision gates (Fable only, one question per call)
 G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
 G4 driver load result on macOS 27; G5 HDR spike.

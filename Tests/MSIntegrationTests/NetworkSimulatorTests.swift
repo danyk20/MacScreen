@@ -36,6 +36,8 @@ private struct Scenario {
     /// Start times (virtual micros after stream start) of 20 ms windows in which the link drops everything.
     var bursts: [UInt64] = []
     var seed: UInt64
+    /// Uniform extra one-way delay per packet, 0 ... jitterMicros.
+    var jitterMicros: Double = 3000
 }
 
 private struct Decoded {
@@ -56,6 +58,9 @@ private struct SimResult {
     var packetsDropped = 0
     var packetsSent = 0
     var fecRatios: [Double] = []
+    var bitrates: [Int] = []
+    /// Display-measured RFC 3550 jitter sent in each feedback (P1).
+    var jitterMs: [Double] = []
 }
 
 /// Subsampled luma of a pixel buffer (every 4th pixel both ways).
@@ -84,7 +89,8 @@ private func meanAbsDiff(_ a: [UInt8], _ b: [UInt8]) -> Double {
 private final class Simulator {
     // Channel model.
     let oneWayMicros: UInt64 = 1500
-    let jitterMicros: Double = 3000
+    var jitterMicros: Double { scenario.jitterMicros }
+    var jitter = InterarrivalJitter()
     let rttMs = 3.0
     let fps = 60
     let frameCount: Int
@@ -243,7 +249,8 @@ private final class Simulator {
         do {
             let payload = FramePayload.encode(f)
             let frags = try Fragmenter.fragment(payload: payload, frameId: id, isKeyframe: f.isKeyframe,
-                                                captureTimeMicros: f.captureTimeMicros, fecRatio: fec)
+                                                captureTimeMicros: f.captureTimeMicros,
+                                                fecRatio: RateController.frameFecRatio(fec, isKeyframe: f.isKeyframe))
             history.record(frameId: id, fragments: frags, nowMicros: now)
             // Pace evenly over 4 ms.
             for (n, o) in frags.enumerated() {
@@ -267,6 +274,7 @@ private final class Simulator {
         schedule(at: at) { [unowned self] in
             self.receivedPackets &+= 1
             guard let frag = try? VideoFragment.decode(data) else { return }
+            self.jitter.add(key: frag.frameId, sentMicros: frag.captureTimeMicros, arrivedMicros: self.now)
             self.process(self.rx.ingest(type: type, fragment: frag, nowMicros: self.now, rttMs: self.rttMs))
         }
     }
@@ -340,14 +348,16 @@ private final class Simulator {
         let fb = FeedbackPacket(highestDecodedFrame: highestDecoded, framesDecoded: framesDecodedCount,
                                 framesDropped: framesDropped, fragsReceived: receivedPackets,
                                 fragsLost: lostPackets, fragsRecovered: UInt32(truncatingIfNeeded: rx.counters.fragsRecovered),
-                                avgDecodeMsX10: 10, jitterMsX10: UInt16(jitterMicros / 100),
+                                avgDecodeMsX10: 10, jitterMsX10: UInt16(min(6553, jitter.jitterMs * 10)),
                                 requestKeyframe: false)
         let t = now
+        result.jitterMs.append(jitter.jitterMs)
         if drops(at: t) { return }
         schedule(at: arrival(sentAt: t)) { [unowned self] in
             if let out = self.rate.ingest(fb, nowMicros: self.now) {
                 self.fec = out.fecRatio
                 self.encoder.setBitrate(out.bitrate)
+                self.result.bitrates.append(out.bitrate)
                 self.result.fecRatios.append(out.fecRatio)
             }
         }
@@ -413,5 +423,22 @@ final class NetworkSimulatorTests: XCTestCase {
     func testTwentyMillisecondBursts() throws {
         try check(Scenario(name: "bursts", lossRate: 0, bursts: [1_000_000, 2_300_000, 3_600_000], seed: 3),
                   requireZeroLoss: false)
+    }
+
+    /// P1: the Display measures RFC 3550 jitter itself. Uniform 0-3 ms delay gives ~1 ms (no back-off);
+    /// Wi-Fi-like 0-30 ms gives ~10 ms, still below the back-off threshold, and the stream stays clean.
+    func testMeasuredJitter() throws {
+        let calm = try runScenario(Scenario(name: "calm", lossRate: 0, seed: 1))
+        let calmJ = try XCTUnwrap(calm.jitterMs.last)
+        XCTAssertGreaterThan(calmJ, 0.2)
+        XCTAssertLessThan(calmJ, 3)
+        let s = Scenario(name: "wifi-jitter", lossRate: 0, seed: 5, jitterMicros: 30_000)
+        try check(s, requireZeroLoss: false)
+        let r = try runScenario(s)
+        let j = try XCTUnwrap(r.jitterMs.last)
+        print("NETSIM jitter calm \(calmJ) ms, wifi \(j) ms, bitrates \(r.bitrates)")
+        XCTAssertGreaterThan(j, 4)
+        XCTAssertLessThan(j, RateController.jitterBadMs)
+        XCTAssertFalse(r.bitrates.contains { $0 < 6_000_000 * 6 / 10 }, "jitter alone must not back off")
     }
 }

@@ -37,6 +37,9 @@ public struct HostSessionConfig {
     public var chooseFormat: (CapabilitiesMessage) -> VideoFormat = HostSessionConfig.defaultFormat
     /// Upper bound for the profile bitrate in bit/s (AppSettings bitrate cap); nil = automatic.
     public var maxBitrate: Int?
+    /// Usable link throughput measured by the automatic link check (P1); the bitrate ceiling and start
+    /// become 0.6 x this, never above the profile bitrate. nil = no measurement.
+    public var linkThroughputBps: Int?
     /// Setup test: when set, the session runs the probe (PLAN 6.10) instead of streaming, then ends.
     public var probe: ProbeRunConfig?
     /// Requests audio (PLAN 6.9) and captures it once streaming. Off by default.
@@ -376,7 +379,9 @@ public final class HostSession {
         let bitsPerPixel = f.codec == .hevc ? MSConstants.bitsPerPixelHEVC : MSConstants.bitsPerPixelH264
         var profileBitrate = max(MSConstants.minBitrate, Int(Double(f.width * f.height * f.fps) * bitsPerPixel))
         if let cap = config.maxBitrate { profileBitrate = max(MSConstants.minBitrate, min(profileBitrate, cap)) }
-        let rc = RateController(profileBitrate: profileBitrate, linkFecRatio: config.fecRatio)
+        let linkCap = config.linkThroughputBps.map { LinkAwareProfile.bitrateCap(throughputBps: $0) }
+        let rc = RateController(profileBitrate: profileBitrate, linkFecRatio: config.fecRatio, throughputCapBps: linkCap)
+        Self.log.notice("rate start=\(rc.initialBitrate) profile=\(profileBitrate) linkCap=\(linkCap ?? -1)")
         rate = rc
         streamLock.lock(); currentFec = rc.fecRatio; currentBitrate = rc.initialBitrate; streamLock.unlock()
         let bitrate = rc.initialBitrate
@@ -566,7 +571,7 @@ public final class HostSession {
             let frags = try Fragmenter.fragment(payload: payload, frameId: id,
                                                 isKeyframe: f.isKeyframe,
                                                 captureTimeMicros: f.captureTimeMicros,
-                                                fecRatio: fec)
+                                                fecRatio: RateController.frameFecRatio(fec, isKeyframe: f.isKeyframe))
             history.record(frameId: id, fragments: frags, nowMicros: MonoClock.nowMicros())
             let datagrams = frags.map { ($0.type, $0.fragment.encode()) }
             let wireBits = Double(datagrams.reduce(0) { $0 + $1.1.count }) * 8
@@ -745,4 +750,81 @@ struct HostStatsWindow {
     var retransmits: UInt64 = 0
     var keyframeReqDisplay: UInt64 = 0
     var keyframeReqRecovery: UInt64 = 0
+}
+
+// MARK: Automatic link-aware profile (Provisional decision P1, PLAN 6.10)
+
+public extension HostSessionConfig {
+    /// A cached link measurement older than this is measured again.
+    static let linkProbeMaxAge: TimeInterval = 7 * 24 * 3600
+
+    /// Share of a cached throughput used when the live link check failed (conservative fallback).
+    static let fallbackThroughputShare = 0.75
+
+    /// Every connection measures the link (P1, user requirement): the cache is only a fallback when the
+    /// measurement fails, and only for the same network. Returns the outcome to apply (nil = G1 defaults)
+    /// and whether it is the fallback.
+    static func resolveLink(measured: ProbeOutcome?, cached: ProbeOutcome?, networkId: String?,
+                            now: Date = Date()) -> (outcome: ProbeOutcome?, fallback: Bool) {
+        if let m = measured, m.link.usableThroughputBps > 0 { return (m, false) }
+        guard var c = cached, isFresh(c, networkId: networkId, now: now) else { return (nil, false) }
+        c.link.trains = c.link.trains.map {
+            var t = $0
+            t.rateBps = Int(Double(t.rateBps) * fallbackThroughputShare)
+            t.deliveryBps = t.deliveryBps.map { Int(Double($0) * fallbackThroughputShare) }
+            return t
+        }
+        c.recommendation = LinkAwareProfile.recommend(panelWidth: c.panelWidth, panelHeight: c.panelHeight,
+                                                      hevc: c.recommendation.candidate?.format.codec != .h264,
+                                                      link: c.link, interface: c.interface)
+        return (c, true)
+    }
+
+    /// `networkId`: the current default gateway; a result from another (or unknown) network is stale.
+    static func isFresh(_ o: ProbeOutcome, networkId: String?, now: Date = Date()) -> Bool {
+        now.timeIntervalSince(o.date) < linkProbeMaxAge && o.link.usableThroughputBps > 0
+            && o.networkId != nil && o.networkId == networkId
+    }
+
+    /// True when the user changed the format settings away from the defaults; their choice then wins.
+    static func userOverridesFormat(_ s: AppSettings) -> Bool {
+        let d = AppSettings()
+        return s.maxHeight != d.maxHeight || s.fps != d.fps || s.codec != d.codec
+    }
+
+    /// Applies a link measurement: the recommended step replaces the default format (unless the user chose
+    /// one), the bitrate ceiling and start become 0.6 x throughput (unless the user set a bitrate cap), and
+    /// the measured FEC default is used unless one is stored in the settings.
+    mutating func applyLink(_ o: ProbeOutcome, settings: AppSettings) {
+        let r = o.recommendation
+        if let c = r.candidate, !Self.userOverridesFormat(settings) {
+            var s = settings
+            s.maxHeight = c.format.height >= o.panelHeight ? 0 : c.format.height
+            s.fps = c.format.fps
+            s.codec = c.format.codec == .h264 ? "h264" : "hevc"
+            chooseFormat = { HostSessionConfig.format(for: $0, settings: s) }
+            if settings.fecRatio == nil { fecRatio = r.fecRatio }
+        }
+        let t = o.link.usableThroughputBps
+        if t > 0, settings.bitrateCapMbps == 0 { linkThroughputBps = t }
+    }
+
+    /// Setup-test config for the automatic link check: short link trains only (0.25 s each, ascending),
+    /// stopping at the first train with loss or a stretched arrival (queueing). Target <= 3 s.
+    static func linkCheckRun() -> ProbeRunConfig {
+        var p = ProbeRunConfig()
+        p.candidates = []
+        p.trainRatesBps = [10, 20, 40, 80, 160].map { $0 * 1_000_000 }
+        p.trainDurationMs = 250
+        p.stopWhenSaturated = true
+        return p
+    }
+
+    /// Replaces the (empty) recommendation of a link-only probe with the link-aware ladder step.
+    static func linkOnlyOutcome(_ o: ProbeOutcome, hevc: Bool) -> ProbeOutcome {
+        var out = o
+        out.recommendation = LinkAwareProfile.recommend(panelWidth: o.panelWidth, panelHeight: o.panelHeight,
+                                                        hevc: hevc, link: o.link, interface: o.interface)
+        return out
+    }
 }

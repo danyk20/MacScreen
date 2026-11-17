@@ -121,6 +121,7 @@ public final class DisplaySession {
         var lastStat: (mc: MediaCounters, rc: Reassembler.Counters, decoded: UInt64, dropped: UInt32)?
         var closed = false                          // decode queue only
         var firstFragAt: [UInt32: UInt64] = [:]     // decode queue only: frameId -> first fragment arrival
+        var jitter = InterarrivalJitter()           // decode queue only: RFC 3550, per frame (P1)
 
         private let statLock = NSLock()
         private var framesDecoded: UInt32 = 0
@@ -320,6 +321,7 @@ public final class DisplaySession {
                     guard let self = self, !self.closed else { return }
                     if self.firstFragAt[frag.frameId] == nil {
                         self.firstFragAt[frag.frameId] = arrived
+                        self.jitter.add(key: frag.frameId, sentMicros: frag.captureTimeMicros, arrivedMicros: arrived)
                         Signpost.begin("reassemble", id: UInt64(frag.frameId))
                         if self.firstFragAt.count > 64 {
                             for k in self.firstFragAt.keys.sorted().prefix(self.firstFragAt.count - 64) {
@@ -405,7 +407,7 @@ public final class DisplaySession {
                                     fragsReceived: UInt32(truncatingIfNeeded: mc.packetsReceived),
                                     fragsLost: UInt32(truncatingIfNeeded: mc.packetsLost),
                                     fragsRecovered: UInt32(truncatingIfNeeded: c.fragsRecovered),
-                                    avgDecodeMs: ms, jitterMs: 0,
+                                    avgDecodeMs: ms, jitterMs: jitter.jitterMs,
                                     requestKeyframe: wantsKeyframe || reassembler.awaitingKeyframe)
             media?.send(.feedback, fb.encode())
             if fb.requestKeyframe { kfRequestFeedbacks &+= 1 }
@@ -424,7 +426,8 @@ public final class DisplaySession {
                 + "fecRecovered=\(rc.fragsRecovered &- p.rc.fragsRecovered) dup=\(rc.fragsDuplicate &- p.rc.fragsDuplicate) "
                 + "frames complete=\(rc.framesDelivered &- p.rc.framesDelivered) lost=\(rc.framesLost &- p.rc.framesLost) "
                 + "decoded=\(decoded &- p.decoded) dropped=\(framesDropped &- p.dropped) rejects=\(decoderRejects) "
-                + "nacks=\(nacksSent) kfReqFb=\(kfRequestFeedbacks) rtt=\(String(format: "%.0f", rttMs ?? -1))"
+                + "nacks=\(nacksSent) kfReqFb=\(kfRequestFeedbacks) rtt=\(String(format: "%.0f", rttMs ?? -1)) "
+                + "jitter=\(String(format: "%.1f", jitter.jitterMs))"
             Log.logger("display-stats").notice("\(line, privacy: .public)")
         }
 
