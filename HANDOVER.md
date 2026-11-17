@@ -69,6 +69,16 @@ iMac state: app in ~/Applications/MacScreen.app (user osx, ssh alias iMac5K), no
 - Fixed: ControlChannel bye-before-cancel bug (Display stayed 'busy' ~5 s after Host stop).
 - Keychain: click 'Always Allow' on the codesign prompt to stop repeated password prompts.
 
+### Later on 2026-11-17 (no iMac access any more)
+- FPS cap root cause: ScreenCapturer minimum frame interval was exactly 1/60 s, dropping ~4 fps; now 90% of
+  1/fps -> 60 fps at 4K in loopback (0142e41). Encoder is not the limit (27 ms encMs is latency with 2 frames
+  in flight). RE-CHECK 60 fps on the iMac. 3200x1800 would only save ~4 ms latency.
+- Security pass (fdccd2f): ~60 hostile-input/fuzz tests, 7 bugs fixed. Unfixed findings: device name/id/knowsPeer not in
+  signed transcript (low, changes wire transcript); Display DoS via unauthenticated connections holding the single
+  session slot up to 5 s + uncapped busyLinks (medium, LAN) - fixing next; pairRequest/pairConfirm Allow-dialog loop
+  from an unpaired Host (low); authenticated frames up to 64 MB (low); NACK amplification for empty block 0 (low);
+  Reassembler frame ID not wrap-safe at 2^32 (info); identity dir mode 0755 (info).
+
 ### Pending decision gates (Fable only, one question per call)
 G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
 G4 driver load result on macOS 27; G5 HDR spike.
