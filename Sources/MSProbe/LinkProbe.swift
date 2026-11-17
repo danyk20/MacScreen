@@ -44,11 +44,20 @@ final class LinkProbeReceiver {
     }
     private var trains: [UInt32: Train] = [:]
 
+    /// Bounds against a peer that sends packets for endless train ids or endless packets of one train.
+    static let maxTrains = 16
+    static let maxArrivalsPerTrain = 65_536
+
     func packet(_ p: LinkProbePacket, at: UInt64) {
         var t = trains[p.trainId] ?? Train()
-        guard !t.finished else { return }
+        guard !t.finished, t.arrivals.count < Self.maxArrivalsPerTrain else { return }
         t.arrivals.append((p.seq, at))
         trains[p.trainId] = t
+        if trains.count > Self.maxTrains { prune(keeping: p.trainId) }
+    }
+
+    private func prune(keeping id: UInt32) {
+        for k in trains.keys.sorted().prefix(trains.count - Self.maxTrains) where k != id { trains[k] = nil }
     }
 
     func expect(_ m: LinkProbeStartMessage) {
@@ -56,7 +65,7 @@ final class LinkProbeReceiver {
         t.expected = m
         trains[m.trainId] = t
         // Keep memory bounded across many runs.
-        if trains.count > 16 { for k in trains.keys.sorted().prefix(trains.count - 16) { trains[k] = nil } }
+        if trains.count > Self.maxTrains { prune(keeping: m.trainId) }
     }
 
     func isComplete(_ id: UInt32) -> Bool {

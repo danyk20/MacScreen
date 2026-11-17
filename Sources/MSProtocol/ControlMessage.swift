@@ -286,6 +286,11 @@ public enum ControlMessage: Equatable {
 /// TCP framing: `u32 length | u8 type | body`, length counts the type byte plus the body.
 public struct ControlFramer {
     public static let maxFrameLength = 64 * 1024 * 1024
+    /// Largest frame accepted before the handshake finished (handshake messages are a few hundred bytes).
+    public static let maxHandshakeFrameLength = 64 * 1024
+
+    /// Per-instance limit; lower it while the peer is still unauthenticated.
+    public var limit = ControlFramer.maxFrameLength
 
     private var buffer = Data()
     private var offset = 0
@@ -312,7 +317,7 @@ public struct ControlFramer {
         var hr = ByteReader(buffer.subdata(in: base..<(base + 4)))
         let len = Int(try hr.u32())
         guard len >= 1 else { throw ControlMessageError.malformed("zero-length frame") }
-        guard len <= ControlFramer.maxFrameLength else { throw ControlMessageError.frameTooLarge(len) }
+        guard len <= limit else { throw ControlMessageError.frameTooLarge(len) }
         guard avail >= 4 + len else { return nil }
         let type = buffer[base + 4]
         let body = buffer.subdata(in: (base + 5)..<(base + 4 + len))

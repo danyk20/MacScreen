@@ -18,6 +18,12 @@ public struct MediaCounters: Equatable {
     /// Packets missing from the receive counter sequence (gaps), minus late arrivals. Pre-FEC network loss.
     public var packetsLost: UInt64 = 0
     public init() {}
+
+    /// Adds to `packetsLost` without trapping: an authenticated peer controls the counter jump.
+    mutating func addLost(_ n: UInt64) {
+        let (v, overflow) = packetsLost.addingReportingOverflow(n)
+        packetsLost = overflow ? UInt64.max : v
+    }
 }
 
 public protocol MediaChannel: AnyObject {
@@ -230,7 +236,7 @@ private final class MediaCore {
             bump {
                 $0.packetsReceived += 1
                 $0.bytesReceived += UInt64(datagram.count)
-                $0.packetsLost += advance
+                $0.addLost(advance)
                 if late, $0.packetsLost > 0 { $0.packetsLost -= 1 }
             }
             onAuthenticated?(conn)

@@ -18,6 +18,11 @@ public func secureRandomData(_ count: Int) -> Data {
     return d
 }
 
+/// Constant-time comparison for secrets typed or shown to the user (pairing code).
+public func constantTimeEqual(_ a: String, _ b: String) -> Bool {
+    HandshakeCrypto.constantTimeEqual(Data(a.utf8), Data(b.utf8))
+}
+
 enum HandshakeCrypto {
     static let keyLen = 32
 

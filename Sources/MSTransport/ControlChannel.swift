@@ -50,7 +50,11 @@ public final class ControlChannel {
 
     private var started = false
     private var closed = false
-    private var framer = ControlFramer()
+    private var framer: ControlFramer = {
+        var f = ControlFramer()
+        f.limit = ControlFramer.maxHandshakeFrameLength  // unauthenticated peer: no 64 MB buffering
+        return f
+    }()
     private var hostHandshake: HostHandshake?
     private var displayHandshake: DisplayHandshake?
     private var sealer: ControlSealer?
@@ -336,6 +340,7 @@ public final class ControlChannel {
         }
         hostHandshake = nil
         displayHandshake = nil
+        framer.limit = ControlFramer.maxFrameLength
         isSecured = true
         let now = Self.now()
         lastRx = now

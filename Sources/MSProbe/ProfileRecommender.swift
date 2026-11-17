@@ -42,7 +42,11 @@ public struct LinkTrainResult: Codable, Equatable {
                                    packetBytes: Int) -> Int? {
         guard received >= 8, lastArrivalMicros > firstArrivalMicros else { return nil }
         let span = Double(lastArrivalMicros - firstArrivalMicros) / 1e6
-        return Int(Double((received - 1) * packetBytes * 8) / span)
+        // `received` and the stamps come from the peer: do the arithmetic in Double and clamp
+        // (Int multiplication or Int(Double) of an absurd value would trap).
+        let bps = Double(received - 1) * Double(packetBytes) * 8 / span
+        guard bps.isFinite else { return nil }
+        return Int(Swift.min(bps, Double(Int.max / 2)))
     }
 
     /// The rate this train shows the link can carry: the offered rate, or less if it arrived slower.

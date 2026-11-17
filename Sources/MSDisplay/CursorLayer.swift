@@ -18,6 +18,9 @@ public struct CursorImageEntry {
 /// Cursor images by `imageId`; bounded, oldest insertion evicted first.
 public struct CursorImageCache {
     public let capacity: Int
+    public static let maxPNGBytes = 512 * 1024
+    public static let maxPixels = 1024
+    public static let maxPoints = 1024.0
     private var entries: [UInt16: CursorImageEntry] = [:]
     private var order: [UInt16] = []
 
@@ -29,9 +32,14 @@ public struct CursorImageCache {
     /// Decodes and stores the image. Returns false when the PNG cannot be decoded or has a bad size.
     @discardableResult
     public mutating func insert(_ m: CursorImageMessage) -> Bool {
-        guard m.widthPt > 0, m.heightPt > 0,
+        // The message comes from the network: bound the compressed size, the on-screen size and the pixel size
+        // (decompression bomb) before anything is decoded.
+        guard m.png.count <= Self.maxPNGBytes,
+              m.widthPt.isFinite, m.heightPt.isFinite, m.hotX.isFinite, m.hotY.isFinite,
+              m.widthPt > 0, m.heightPt > 0, m.widthPt <= Self.maxPoints, m.heightPt <= Self.maxPoints,
               let src = CGImageSourceCreateWithData(m.png as CFData, nil),
-              let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return false }
+              let img = CGImageSourceCreateImageAtIndex(src, 0, nil),
+              img.width <= Self.maxPixels, img.height <= Self.maxPixels else { return false }
         if entries[m.id] == nil {
             order.append(m.id)
             if order.count > capacity { entries[order.removeFirst()] = nil }

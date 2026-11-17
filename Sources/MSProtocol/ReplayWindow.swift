@@ -17,10 +17,11 @@ public struct ReplayWindow {
             if advance >= n {
                 for i in 0..<bits.count { bits[i] = 0 }
             } else {
-                var c = highest + 1
-                while c <= counter {
-                    clear(c)
+                // Counted loop: `c <= counter` would overflow (trap) when counter == UInt64.max.
+                var c = highest
+                for _ in 0..<advance {
                     c += 1
+                    clear(c)
                 }
             }
             highest = counter
