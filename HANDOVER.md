@@ -44,7 +44,7 @@ Committed and pushed to private repo danyk20/MacScreen (HTTPS remote): M0, M1, M
 M3 T3.1-T3.6, M4 T4.1-T4.4, M5 T5.1-T5.3 (driver written+compiled, NOT installed), T6.1 (P3),
 T7.1 (docs), T7.2 (cleanup, Scripts/test.sh, Scripts/deploy-display.sh). 0 build warnings.
 Loopback on this Mac confirmed live by the user (virtual display, --windowed, fast).
-Not done: T6.2/T6.3 (HDR, Gate G5), anything needing the iMac.
+Not done: T6.3 (10-bit SDR, blocked on the iMac Main10 decode check, see Provisional decision P3), anything needing the iMac.
 
 ### First live session on the iMac (2026-11-17)
 Paired and streaming over Wi-Fi (HEVC 4K60 default, G1 applied). Gateway 192.168.43.1 (hotspot-like,
@@ -120,7 +120,7 @@ real pmset sleep cycle OK. Not tested live: display-off without system sleep (or
 
 ### Pending decision gates (Fable only, one question per call)
 G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
-G4 driver load result on macOS 27; G5 HDR spike.
+G4 driver load result on macOS 27; G5 HDR spike (decided provisionally as P3 2026-11-18: HDR dropped, 10-bit SDR pending iMac check).
 
 ### iMac checklist, in order (needs the user)
 1. Probe: copy build/imac-probe.zip to iMac, unzip, `xattr -dr com.apple.quarantine .`,
@@ -144,7 +144,23 @@ G4 driver load result on macOS 27; G5 HDR spike.
   fallback, NACK/rate control on a real network.
 - Menu bar item "MS" is invisible if the menu bar is full or the frontmost app is full screen;
   use `--connect` as a workaround.
-- Real HDR: plan says only if a virtual display can advertise it (G5).
+- HDR: dropped for v1 (G5 decided provisionally, P3 in PLAN.md, Opus, needs Fable review). A virtual display CAN be
+  HDR (private transferFunction=1 initialiser, EDR 5.0; docs/hdr-spike.md) but the iMac panel (headroom 1.875) gains
+  little. 10-bit SDR waits on the check below.
+
+### iMac 10-bit decode check (G5/P3, pending - run when the iMac is reachable)
+Host, repo root (build/msprobe must be universal and current; `Scripts/make-app.sh` rebuilds it):
+```
+mkdir -p build/imac-10bit
+for s in 3840x2160 3200x1800 2560x1440; do w=${s%x*}; h=${s#*x}
+  build/msprobe encode --width $w --height $h --fps 60 --codec hevc --bits 10 --frames 90 --out build/imac-10bit/hevc10_${s}_60.msv; done
+build/msprobe encode --width 3840 --height 2160 --fps 60 --codec hevc --bits 8 --frames 90 --out build/imac-10bit/hevc08_3840x2160_60.msv
+ssh iMac5K 'mkdir -p ~/msprobe10' && scp -r build/msprobe build/imac-10bit iMac5K:~/msprobe10/
+ssh iMac5K 'cd ~/msprobe10 && xattr -dr com.apple.quarantine . ; ./msprobe decode-all imac-10bit' > docs/imac-10bit-result.json
+```
+Pass = hevc10 3840x2160 has `hardware: true` and `passed: true` (p95 < 10.0 ms, throughput >= 90 fps) -> build T6.3
+as scoped in PLAN section 8 (opt-in 10-bit SDR, HEVC <= 4K, no wire change). Smaller sizes passing in hardware cap
+10-bit at that size. Software decode or misses everywhere -> drop 10-bit, record numbers in docs/hdr-spike.md and PLAN.
 
 ## Waiting on the user
 

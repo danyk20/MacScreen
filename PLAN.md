@@ -401,8 +401,10 @@ Profile bitrate = width × height × fps × bitsPerPixel(codec).
 4. `ProfileRecommender` picks the first candidate passing 1 and 2 whose bitrate at
    `minBitsPerPixel` ≤ 0.6 × throughput; start bitrate = min(profile bitrate, 0.6 × throughput). Manual-only
    candidates are never picked. It returns the reasons for every rejected candidate.
-5. HDR is offered only if: Display reports EDR headroom > 1, 10-bit sample decodes in
-   hardware, Host encodes Main10, and Gate G5 enabled HDR virtual displays.
+5. HDR is not offered in v1 (Gate G5, Provisional decision P3). 10-bit SDR (HEVC Main10, ≤ 3840x2160, opt-in, never
+   picked automatically) is offered only if: the Display decodes a Main10 sample of that candidate in hardware with
+   p95 < 0.6 × frame interval and unpaced throughput ≥ 1.5 × fps (same rule as step 2), and the Host encodes it in
+   hardware with p95 < 0.85 × frame interval. Until the P3 iMac check passes, 10-bit is not offered at all.
 Results are cached per (Display id, interface type). Re-run from Settings or when the
 interface type changes.
 
@@ -540,7 +542,20 @@ Format: **ID — title** · files · what to build · acceptance. All tasks also
   layer colour space Display P3 when the Display panel is P3.
 - **T6.2 — HDR spike (Fable-led). → Gate G5.** If a virtual display cannot advertise
   HDR on current macOS, HDR stays hidden and the plan ends at 10-bit SDR.
-- **T6.3 — 10-bit / HDR pipeline** only if G5 passes.
+  *Status: DONE 2026-11-18 (Opus, Fable out of credits); report `docs/hdr-spike.md`, scripts `Scripts/spikes/`.
+  G5 decided provisionally (P3, section 9): HDR dropped for v1; 10-bit SDR conditional on an iMac decode check.*
+- **T6.3 — 10-bit SDR pipeline (no HDR)** only if the P3 iMac Main10 decode check passes.
+  *Status: BLOCKED on that check (iMac unreachable 2026-11-18); nothing built. If it passes, T6.3 = (a) capture:
+  `ScreenCapturer` `tenBit` → SCK `x420` (10-bit 4:2:0 video range) from the normal tf=0 virtual display;
+  (b) encode: `VideoEncoder` bitDepth 10 → `kVTProfileLevel_HEVC_Main10_AutoLevel`, HEVC only, ≤ 3840x2160, same
+  bitrate rule and VUI as 8-bit (sRGB / Display P3 per T6.1, no PQ); (c) negotiation: existing `VideoFormat.bitDepth`
+  field, Host offers 10 only when the user opted in and the cached Display probe passed the Main10 decode check,
+  Display accepts or answers 8 - no new wire fields or constants; (d) Display: `MetalRenderer` `bgr10a2Unorm`
+  layer for bitDepth 10 (switch exists), decoder output 10-bit biplanar; (e) recommender: section 6.10 step 5,
+  Settings "10-bit colour (HEVC, ≤ 4K)" toggle disabled with the reason when the check failed; (f) tests: format
+  negotiation 10 → 8 fallback, recommender gating, encoder Main10 profile selection; live: gradient banding check
+  and capture→present / encode / decode times vs 8-bit on the iMac. If the check fails: T6.3 is dropped; record
+  the measured numbers in `docs/hdr-spike.md` and here, keep the dormant switches.*
 
 ### M7 — Release preparation
 - **T7.1 — Docs:** build from source, permissions, pairing, troubleshooting, threat
@@ -555,7 +570,7 @@ Format: **ID — title** · files · what to build · acceptance. All tasks also
 | G2 | first live session on the iMac | picture correctness, HiDPI behaviour, cursor mode default |
 | G3 | latency CSV on Wi-Fi and wired | pacing, jitter wait, FEC defaults; optional sharpness and LTR work |
 | G4 | driver load result | signing approach for the audio driver, or fallback design |
-| G5 | HDR spike | ship, mark experimental, or drop HDR |
+| G5 | HDR spike | ship, mark experimental, or drop HDR - **provisional P3 (2026-11-18): HDR dropped for v1; 10-bit SDR opt-in only if the iMac Main10 decode check passes (pending)** |
 
 **G1 decision (2026-11-17).** Default = HEVC 8-bit 3840x2160 @ 60 fps, start bitrate 30 Mbit/s (0.06 bpp), FEC 0.0 wired /
 0.10 Wi-Fi, encoded from a virtual display that is always the Display panel size with HiDPI (5120x2880, 2560x1440 pt),
@@ -634,6 +649,42 @@ defaults, not measurements. Data (live, iMac 5K over Wi-Fi): good link "Beachclu
    Re-open (Fable) if a link the check accepted shows > 6 keyframes/min sustained.
 Still open for Fable: re-run the link check on sustained queueing back-off; wired G3 CSV (M3 exit targets p95 < 30 ms
 are not reachable on this Wi-Fi: p95 141 ms is network-bound).
+
+**Provisional decision P3 (Gate G5, 2026-11-18, Opus, to be reviewed by Fable).** Fable out of credits. Input:
+`docs/hdr-spike.md` (M2 Host, macOS 27.2.1; iMac unreachable) and `docs/imac-probe-result.json`. No code, wire-format
+or constant change.
+1. *HDR: dropped for v1* (not shipped, not even hidden/experimental). The Host side works - private
+   `-[CGVirtualDisplayMode initWithWidth:height:refreshRate:transferFunction:]` with transferFunction = 1 gives EDR
+   headroom 5.0, SCK delivers PQ 10-bit `x420` (P3 primaries, 709 matrix), HW Main10 encode at 4K60 p95 13.1 ms (~9 %
+   over 8-bit, within 14.17 ms). But: the only Display is a ~500-nit iMac panel with EDR headroom 1.875, so PQ content
+   needs EDR tone mapping on the Display for little visible gain on a desktop that stays near SDR white; the i5-6500
+   (Skylake) very likely has no hardware Main10 decode; it adds a second undocumented initialiser plus PQ VUI and
+   metadata handling. A hidden/off build would still be untested code on a private API with no Display to test it on.
+   The plan rule ("cannot advertise HDR → ends at 10-bit SDR") does not force HDR: advertising works, value does not.
+   Revisit when a Display with headroom ≥ 4 and HW Main10 decode exists; the spike scripts are the starting point.
+   Settings shows no HDR toggle (section 7 "HDR toggle" is out for v1).
+2. *10-bit SDR: conditional, opt-in only, nothing built until measured.* Pass rule (all must hold on the iMac for
+   HEVC Main10 3840x2160@60): `hardware: true` and `passed: true` (p95 < 10.0 ms = 0.6 × 16.67 ms, unpaced
+   throughput ≥ 90 fps); lower sizes (3200x1800, 2560x1440) are recorded too and become the 10-bit maximum if 4K
+   fails but they pass in hardware. Commands (Host, repo root; then iMac via `ssh iMac5K`):
+   ```
+   Scripts/make-app.sh   # or reuse build/msprobe if it is current; must be universal (lipo -archs build/msprobe)
+   mkdir -p build/imac-10bit
+   for s in 3840x2160 3200x1800 2560x1440; do w=${s%x*}; h=${s#*x}
+     build/msprobe encode --width $w --height $h --fps 60 --codec hevc --bits 10 --frames 90 \
+       --out build/imac-10bit/hevc10_${s}_60.msv; done
+   build/msprobe encode --width 3840 --height 2160 --fps 60 --codec hevc --bits 8 --frames 90 \
+     --out build/imac-10bit/hevc08_3840x2160_60.msv          # 8-bit control, should match G1 (p95 ~4.7 ms)
+   ssh iMac5K 'mkdir -p ~/msprobe10' && scp -r build/msprobe build/imac-10bit iMac5K:~/msprobe10/
+   ssh iMac5K 'cd ~/msprobe10 && xattr -dr com.apple.quarantine . ; ./msprobe decode-all imac-10bit' \
+     > docs/imac-10bit-result.json
+   ```
+   Pass → T6.3 as scoped in section 8 (no HDR, no new wire fields). Fail (software decode, or p95/throughput miss at
+   every size) → 10-bit dropped for v1, numbers recorded in `docs/hdr-spike.md` and section 8; the existing dormant
+   switches (`tenBit`, bitDepth 10, `bgr10a2Unorm`) stay unused. Expected outcome: fail (Skylake), which is why
+   nothing is built ahead of the measurement.
+Open for Fable: confirm dropping HDR rather than hidden-experimental; confirm 10-bit stays opt-in (never chosen by
+the recommender) even if it passes.
 
 ## 10. Verification
 
