@@ -200,3 +200,17 @@ final class MetalRendererTests: XCTestCase {
         XCTAssertFalse(w.isVisible)
     }
 }
+
+/// Regression: the full-screen Display window sits above `.modalPanel`, which hid the pairing
+/// "Allow?" alert behind a black screen, so pairing never completed.
+final class DisplayWindowDialogTests: XCTestCase {
+    func testDialogRunsBelowModalPanelAndRestoresLevel() {
+        _ = NSApplication.shared
+        let w = DisplayWindow(windowed: false)
+        let fullScreen = w.level
+        XCTAssertGreaterThan(fullScreen.rawValue, NSWindow.Level.modalPanel.rawValue)
+        let inside = w.runningDialog { w.level }
+        XCTAssertLessThan(inside.rawValue, NSWindow.Level.modalPanel.rawValue)
+        XCTAssertEqual(w.level, fullScreen)
+    }
+}

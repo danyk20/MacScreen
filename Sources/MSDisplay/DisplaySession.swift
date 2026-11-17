@@ -136,13 +136,17 @@ public final class DisplaySession {
                 openMedia: { [weak self] in self?.ctlQueue.async { self?.openMediaForProbe() } })
             channel.onSecured = { [weak self] r in self?.secured(r) }
             channel.onMessage = { [weak self] m in self?.message(m) }
-            channel.onClosed = { [weak self] _ in self?.teardown() }
+            channel.onClosed = { [weak self] reason in
+                Display_log("control closed: \(reason)")
+                self?.teardown()
+            }
             channel.start()
         }
 
         func secured(_ r: HandshakeResult) {
             result = r
             paired = r.peerWasKnown
+            Display_log("secured with \(r.peerDeviceName): known=\(r.peerWasKnown)")
             if paired { becamePaired() }
         }
 
@@ -158,11 +162,13 @@ public final class DisplaySession {
             switch m {
             case .pairRequest:
                 pairRequested = true
+                Display_log("pairRequest from \(r.peerDeviceName): showing code")
                 sink.showPairingCode(r.pairingCode, hostName: r.peerDeviceName)
             case .pairConfirm:
                 guard pairRequested else { return }
                 pairRequested = false
                 sink.hidePairingCode()
+                Display_log("pairConfirm from \(r.peerDeviceName): asking to allow")
                 sink.askAllow(hostName: r.peerDeviceName) { [weak self] accepted in
                     self?.ctlQueue.async { self?.pairingDecided(accepted) }
                 }
@@ -181,10 +187,15 @@ public final class DisplaySession {
         }
 
         func pairingDecided(_ accepted: Bool) {
+            Display_log("pairing decided: accepted=\(accepted) linkEnded=\(ended)")
             guard !ended, let r = result else { return }
             if accepted {
-                try? store.addPeer(Peer(deviceId: r.peerDeviceId, deviceName: r.peerDeviceName,
-                                              identityKey: r.peerIdentityKey, pairedAt: Date()))
+                do {
+                    try store.addPeer(Peer(deviceId: r.peerDeviceId, deviceName: r.peerDeviceName,
+                                           identityKey: r.peerIdentityKey, pairedAt: Date()))
+                } catch {
+                    Display_log("identity store: \(error)", error: true)
+                }
                 paired = true
             }
             channel.send(.pairResult(PairResultMessage(accepted: accepted)))
@@ -200,6 +211,7 @@ public final class DisplaySession {
 
         func startStreaming(_ req: SessionRequestMessage) {
             guard media == nil, let r = result else { return }
+            Display_log("sessionRequest \(req.format.codec) \(req.format.width)x\(req.format.height)@\(req.format.fps) hiDPI=\(req.hiDPI) cursor=\(req.cursorMode)")
             guard let codec = Codec(rawValue: req.format.codec) else {
                 channel.send(.bye(ByeMessage(reason: "bad-format")))
                 teardown()
@@ -223,11 +235,13 @@ public final class DisplaySession {
                 guard let self = self else { return }
                 self.ctlQueue.async {
                     guard !self.ended else { return }
+                    Display_log("media listening on \(port), sending sessionAccept")
                     self.channel.send(.sessionAccept(SessionAcceptMessage(udpPort: port)))
                 }
             }
             media = server
             do { try server.start() } catch {
+                Display_log("media server failed: \(error)", error: true)
                 channel.send(.bye(ByeMessage(reason: "media-failed")))
                 teardown()
                 return
@@ -393,6 +407,7 @@ public final class DisplaySession {
         func teardown() {
             guard !ended else { return }
             ended = true
+            Display_log("link teardown (announced=\(announced))")
             probe?.stop()
             decodeTimer?.cancel(); decodeTimer = nil
             feedbackTimer?.cancel(); feedbackTimer = nil
@@ -412,6 +427,7 @@ public final class DisplaySession {
     }
 }
 
-private func Display_log(_ s: String) {
-    Log.logger("display").debug("\(s, privacy: .public)")
+private func Display_log(_ s: String, error: Bool = false) {
+    if error { Log.logger("display").error("\(s, privacy: .public)") }
+    else { Log.logger("display").notice("\(s, privacy: .public)") }
 }

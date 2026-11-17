@@ -254,11 +254,15 @@ public final class HostSession {
         let changed = stateValue != s
         stateValue = s
         stateLock.unlock()
-        if changed { onStateChange?(s) }
+        if changed {
+            Self.log.notice("state -> \(String(describing: s), privacy: .public)")
+            onStateChange?(s)
+        }
     }
 
     private func handleSecured(_ r: HandshakeResult) {
         handshake = r
+        Self.log.notice("secured with \(r.peerDeviceName, privacy: .public): peerWasKnown=\(r.peerWasKnown) peerKnowsUs=\(String(describing: r.peerKnowsUs), privacy: .public)")
         if r.peerWasKnown && r.peerKnowsUs == true {
             beginNegotiation()
         } else {
@@ -306,6 +310,7 @@ public final class HostSession {
         format = f
         let wire = WireVideoFormat(codec: f.codec.rawValue, width: f.width, height: f.height,
                                    fps: f.fps, bitDepth: f.bitDepth)
+        Self.log.notice("sessionRequest \(String(describing: f), privacy: .public) hiDPI=\(self.config.hiDPI) cursor=\(self.config.cursorMode, privacy: .public)")
         channel?.send(.sessionRequest(SessionRequestMessage(format: wire, hiDPI: config.hiDPI,
                                                             cursorMode: config.cursorMode, audio: config.audioEnabled,
                                                             fecRatio: config.fecRatio)))
@@ -351,6 +356,7 @@ public final class HostSession {
     // MARK: Streaming
 
     private func startStreaming(udpPort: UInt16) {
+        Self.log.notice("sessionAccept udpPort=\(udpPort)")
         guard let r = handshake, let ch = channel, let f = format, let caps = displayCaps,
               let host = ch.remoteHost else {
             finish(.failure("missing session state"))
@@ -379,7 +385,7 @@ public final class HostSession {
             guard let self = self else { return }
             self.queue.async { self.startSource(format: f, caps: caps, peer: r) }
         }
-        m.onFailed = { reason in Self.log.debug("media: \(reason, privacy: .public)") }
+        m.onFailed = { reason in Self.log.error("media: \(reason, privacy: .public)") }
         media = m
         m.start()
     }
@@ -605,6 +611,7 @@ public final class HostSession {
     private func finish(_ reason: HostSessionEnd) {
         guard !ended else { return }
         ended = true
+        Self.log.notice("session end in \(String(describing: self.state), privacy: .public): \(String(describing: reason), privacy: .public)")
         if state == .awaitingPairingApproval, let r = handshake {
             // Pairing was never confirmed by the Display: forget the key we stored on a matching code.
             try? store.removePeer(identityKey: r.peerIdentityKey)

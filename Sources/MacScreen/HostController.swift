@@ -17,6 +17,7 @@ private final class NoFrameSource: FrameSource {
 
 /// Host role: discovers Displays, connects, drives pairing UI. Main thread only except where noted.
 final class HostController: NSObject {
+    private static let log = Log.logger("host-app")
     private let store: IdentityStore
     private let caps: CapabilitiesMessage
     private let browser = DisplayBrowser(queue: DispatchQueue(label: "ms.browse"))
@@ -244,6 +245,7 @@ final class HostController: NSObject {
     }
 
     private func connect(to d: DiscoveredDisplay) {
+        Self.log.notice("connecting to \(d.name, privacy: .public)")
         guard #available(macOS 12.3, *) else {
             _ = Dialogs.alert("macOS 12.3 or newer required", "Screen capture needs macOS 12.3 or newer on the Host.")
             return
@@ -308,6 +310,7 @@ final class HostController: NSObject {
     private func handle(_ st: HostSessionState, from s: HostSession) {
         guard s === session else { return }
         let name = connectedTo?.name ?? "Display"
+        Self.log.notice("session \(name, privacy: .public): \(String(describing: st), privacy: .public)")
         switch st {
         case .idle: update("Idle")
         case .connecting: update("Connecting to \(name)\u{2026}")

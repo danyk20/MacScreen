@@ -50,6 +50,7 @@ final class DisplayController {
 
     private let power = DisplayPowerController(assertions: IOKitPowerAssertions())
     private let latencyCSVPath: String?
+    private static let log = Log.logger("display-app")
 
     init(store: IdentityStore, caps: CapabilitiesMessage, windowed: Bool, stats: Bool,
          latencyCSV: String? = nil) throws {
@@ -60,9 +61,14 @@ final class DisplayController {
                         colour: ColourPlan(panelIsP3: caps.wideColor))
         window.onResize = { [renderer] size in renderer.updateDrawableSize(size) }
         let rs = RendererSink(renderer: renderer, window: window)
-        rs.onAskAllow = { host, done in
-            let r = Dialogs.alert("Allow \(host)?", "\(host) wants to use this Mac as a display.",
-                                  buttons: ["Allow", "Deny"])
+        rs.onAskAllow = { [window] host, done in
+            Self.log.notice("asking to allow \(host, privacy: .public)")
+            // The full-screen window sits above modal panels; lower it or the alert opens hidden behind it.
+            let r = window.runningDialog {
+                Dialogs.alert("Allow \(host)?", "\(host) wants to use this Mac as a display.",
+                              buttons: ["Allow", "Deny"])
+            }
+            Self.log.notice("allow \(host, privacy: .public): \(r == .alertFirstButtonReturn ? "allowed" : "denied", privacy: .public)")
             done(r == .alertFirstButtonReturn)
         }
         sink = AppSink(rs)
@@ -110,18 +116,22 @@ final class DisplayController {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "macscreen-latency.csv"
         panel.allowedContentTypes = [.commaSeparatedText]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try session.latency.writeCSV(to: url) } catch {
-            _ = Dialogs.alert("Export failed", String(describing: error))
+        window.runningDialog {
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            do { try session.latency.writeCSV(to: url) } catch {
+                _ = Dialogs.alert("Export failed", String(describing: error))
+            }
         }
     }
 
     @objc private func showCode() {
-        if let c = sink.currentCode {
-            _ = Dialogs.alert("Pairing code for \(c.host)", c.code)
-        } else {
-            _ = Dialogs.alert("No pairing in progress",
-                              "A code appears here when a Host that this Mac does not know connects.")
+        window.runningDialog {
+            if let c = sink.currentCode {
+                _ = Dialogs.alert("Pairing code for \(c.host)", c.code)
+            } else {
+                _ = Dialogs.alert("No pairing in progress",
+                                  "A code appears here when a Host that this Mac does not know connects.")
+            }
         }
     }
 

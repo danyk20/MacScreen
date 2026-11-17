@@ -99,6 +99,18 @@ public final class DisplayWindow {
         relayout()
     }
 
+    /// Current window level (full-screen mode sits above the menu bar).
+    public var level: NSWindow.Level { window.level }
+
+    /// Runs a modal dialog (e.g. the pairing "Allow?" alert) so it is visible: the full-screen window's
+    /// level is above `.modalPanel`, so an `NSAlert` would open hidden behind it. The level is restored after.
+    public func runningDialog<T>(_ body: () -> T) -> T {
+        let saved = window.level
+        if !windowed { window.level = .normal }
+        defer { window.level = saved }
+        return body()
+    }
+
     public func hide() {
         window.orderOut(nil)
         if let saved = savedPresentation {
