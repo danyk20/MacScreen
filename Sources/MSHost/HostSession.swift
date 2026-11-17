@@ -120,6 +120,7 @@ public final class HostSession {
     private var fpsDivisor = 1             // guarded by streamLock; 2 after reconfigure to 30 fps
     private var captureTick = 0            // source thread only
     private var currentFec = 0.0           // guarded by streamLock
+    private var currentBitrate = 0         // guarded by streamLock (pacing)
     private var cursorTracker: CursorTracker?
     private var audioCapture: AudioCapture?
     private var recoveryTimer: DispatchSourceTimer?
@@ -141,6 +142,9 @@ public final class HostSession {
     private var highestDecoded: UInt32 = 0
     private var lastProgress: UInt64 = 0
     private var lastForcedKeyframe: UInt64 = 0
+    /// Last keyframe handed to the media channel (frame id, send time); guarded by streamLock.
+    private var lastKeyframeSent: (id: UInt32, at: UInt64)?
+    private var hostRttMs: Double = 0            // guarded by streamLock; copy of pingClock.rttMs
     private var keyframePendingSince: UInt64?
     private var streamActive = false
     private var frameCounter: UInt32 = 0     // encode queue only
@@ -150,6 +154,13 @@ public final class HostSession {
     /// Encoded payload bytes handed to the media channel (before FEC and encryption).
     public var bytesSent: UInt64 { streamLock.lock(); defer { streamLock.unlock() }; return bytesSentValue }
     private var framesDropped: UInt64 = 0
+    // Periodic stats (category host-stats), guarded by streamLock.
+    private var st = HostStatsWindow()
+    private var encodeStart: [UInt64: UInt64] = [:]
+    private var statsTimer: DispatchSourceTimer?
+    private var lastMediaCounters = MediaCounters()
+    private var lastCapCounters: (UInt64, UInt64, UInt64) = (0, 0, 0)
+    private static let statsLog = Log.logger("host-stats")
 
     public init(identityStore: IdentityStore, capabilities: CapabilitiesMessage,
                 config: HostSessionConfig = HostSessionConfig(),
@@ -367,7 +378,7 @@ public final class HostSession {
         if let cap = config.maxBitrate { profileBitrate = max(MSConstants.minBitrate, min(profileBitrate, cap)) }
         let rc = RateController(profileBitrate: profileBitrate, linkFecRatio: config.fecRatio)
         rate = rc
-        streamLock.lock(); currentFec = rc.fecRatio; streamLock.unlock()
+        streamLock.lock(); currentFec = rc.fecRatio; currentBitrate = rc.initialBitrate; streamLock.unlock()
         let bitrate = rc.initialBitrate
         do {
             encoder = try VideoEncoder(format: f, bitrate: bitrate,
@@ -462,6 +473,41 @@ public final class HostSession {
         }
         pingTimer = pt
         pt.resume()
+
+        let stt = DispatchSource.makeTimerSource(queue: mediaQueue)
+        stt.schedule(deadline: .now() + .seconds(2), repeating: .seconds(2))
+        stt.setEventHandler { [weak self] in self?.logStats() }
+        statsTimer = stt
+        stt.resume()
+    }
+
+    /// Media queue, every 2 s: one `host-stats` line with per-stage frame counts for the window.
+    private func logStats() {
+        streamLock.lock()
+        let w = st
+        st = HostStatsWindow()
+        let div = fpsDivisor
+        let fec = currentFec
+        streamLock.unlock()
+        let mc = media?.counters ?? MediaCounters()
+        let pkts = mc.packetsSent &- lastMediaCounters.packetsSent
+        let wire = mc.bytesSent &- lastMediaCounters.bytesSent
+        lastMediaCounters = mc
+        var sck = "n/a"
+        if #available(macOS 12.3, *), let c = (source as? DisplayCaptureSource)?.captureCounters {
+            let p = lastCapCounters
+            sck = "\(c.framesDelivered &- p.0)/\(c.framesIdle &- p.1)/\(c.framesOther &- p.2)"
+            lastCapCounters = (c.framesDelivered, c.framesIdle, c.framesOther)
+        }
+        let e = w.encodeMs.sorted()
+        func pct(_ q: Double) -> Double { e.isEmpty ? 0 : e[min(e.count - 1, Int(q * Double(e.count)))] }
+        let br = rate?.bitrate ?? 0
+        let line = String(format: "2s sck(cpl/idle/oth)=%@ cap=%llu busyDrop=%llu divSkip=%llu enc in/out=%llu/%llu kf=%llu encMs p50/p95=%.1f/%.1f sent=%llu payloadKB=%llu maxFrameKB=%llu pkts=%llu wireMbps=%.1f nacks=%llu rtx=%llu kfReq disp/recov=%llu/%llu bitrate=%.1fM fec=%.2f div=%d",
+                          sck, w.captured, w.droppedBusy, w.skippedDivisor, w.encodeIn, w.encodeOut, w.keyframesOut,
+                          pct(0.5), pct(0.95), w.framesSent, w.bytes / 1024, w.maxFrameBytes / 1024, pkts,
+                          Double(wire) * 8 / 2 / 1e6, w.nacks, w.retransmits, w.keyframeReqDisplay,
+                          w.keyframeReqRecovery, Double(br) / 1e6, fec, div)
+        Self.statsLog.notice("\(line, privacy: .public)")
     }
 
     /// Source thread.
@@ -471,16 +517,23 @@ public final class HostSession {
         guard streamActive else { streamLock.unlock(); return }
         lastBuffer = pb
         lastCaptureArrival = MonoClock.nowMicros()
-        if enc.pendingFrames > 1 {
+        st.captured += 1
+        // Up to 2 frames in flight: at 4K the HW encoder's latency (22-37 ms measured) exceeds one
+        // 16.7 ms frame interval while its throughput keeps up; `> 1` dropped 10-27 frames per 2 s.
+        if enc.pendingFrames > 2 {
             framesDropped += 1
+            st.droppedBusy += 1
             streamLock.unlock()
             return
         }
         if fpsDivisor > 1 {
             captureTick &+= 1
-            if captureTick % fpsDivisor != 0 { streamLock.unlock(); return }
+            if captureTick % fpsDivisor != 0 { st.skippedDivisor += 1; streamLock.unlock(); return }
         }
         keyframePendingSince = nil
+        st.encodeIn += 1
+        encodeStart[captureTimeMicros] = lastCaptureArrival
+        if encodeStart.count > 32 { encodeStart.removeAll(keepingCapacity: true) }
         streamLock.unlock()
         Signpost.event("capture", id: captureTimeMicros)
         Signpost.begin("encode", id: captureTimeMicros)
@@ -495,6 +548,12 @@ public final class HostSession {
         streamLock.lock()
         let active = streamActive
         let fec = currentFec
+        let bitrateNow = currentBitrate
+        st.encodeOut += 1
+        if f.isKeyframe { st.keyframesOut += 1 }
+        if let t0 = encodeStart.removeValue(forKey: f.captureTimeMicros) {
+            st.encodeMs.append(Double(MonoClock.nowMicros() &- t0) / 1000)
+        }
         streamLock.unlock()
         guard active, let m = media else { return }
         frameCounter &+= 1
@@ -509,7 +568,11 @@ public final class HostSession {
                                                 captureTimeMicros: f.captureTimeMicros,
                                                 fecRatio: fec)
             history.record(frameId: id, fragments: frags, nowMicros: MonoClock.nowMicros())
-            m.sendBatch(frags.map { ($0.type, $0.fragment.encode()) }, paceOverMicros: 4000)
+            let datagrams = frags.map { ($0.type, $0.fragment.encode()) }
+            let wireBits = Double(datagrams.reduce(0) { $0 + $1.1.count }) * 8
+            let paceBps = max(Double(MSConstants.pacingRateBps), 2.5 * Double(bitrateNow))
+            let paceMicros = max(4000, UInt64(wireBits / paceBps * 1e6))
+            m.sendBatch(datagrams, paceOverMicros: paceMicros)
         } catch {
             Self.log.error("fragment failed: \(String(describing: error), privacy: .public)")
             return
@@ -517,8 +580,12 @@ public final class HostSession {
         streamLock.lock()
         if lastSentFrameId <= highestDecoded { lastProgress = MonoClock.nowMicros() }
         lastSentFrameId = id
+        if f.isKeyframe { lastKeyframeSent = (id, MonoClock.nowMicros()) }
         framesSentValue += 1
         bytesSentValue += payloadBytes
+        st.framesSent += 1
+        st.bytes += payloadBytes
+        st.maxFrameBytes = max(st.maxFrameBytes, payloadBytes)
         streamLock.unlock()
     }
 
@@ -540,6 +607,7 @@ public final class HostSession {
         case .nack:
             if let n = try? NackPacket.decode(payload) {
                 let items = history.retransmissions(for: n, nowMicros: MonoClock.nowMicros())
+                streamLock.lock(); st.nacks += 1; st.retransmits += UInt64(items.count); streamLock.unlock()
                 if !items.isEmpty { media?.sendBatch(items, paceOverMicros: 0) }
             }
         default:
@@ -555,21 +623,26 @@ public final class HostSession {
         }
         highestDecoded = max(highestDecoded, fb.highestDecodedFrame)
         var force = false
-        if fb.requestKeyframe, now &- lastForcedKeyframe >= UInt64(MSConstants.keyframeMinIntervalMs) * 1000 {
+        hostRttMs = pingClock.rttMs ?? 0
+        if fb.requestKeyframe, now &- lastForcedKeyframe >= UInt64(MSConstants.keyframeMinIntervalMs) * 1000,
+           !keyframeInFlight(now: now) {
             lastForcedKeyframe = now
             keyframePendingSince = now
             force = true
+            st.keyframeReqDisplay += 1
         }
         streamLock.unlock()
         if force { encoder?.requestKeyframe() }
-        if let out = rate?.ingest(fb, nowMicros: now) { applyRate(out) }
+        if let out = rate?.ingest(fb, nowMicros: now, rttMs: pingClock.rttMs) { applyRate(out) }
     }
 
     /// Media queue. Applies bitrate and FEC live; a 30 fps switch is announced on the control channel.
     private func applyRate(_ out: RateController.Output) {
+        Self.statsLog.notice("rate bitrate=\(out.bitrate) fec=\(out.fecRatio) switchTo30fps=\(out.switchTo30fps)")
         encoder?.setBitrate(out.bitrate)
         streamLock.lock()
         currentFec = out.fecRatio
+        currentBitrate = out.bitrate
         if out.switchTo30fps { fpsDivisor = 2 }
         streamLock.unlock()
         if out.switchTo30fps {
@@ -583,6 +656,15 @@ public final class HostSession {
         }
     }
 
+    /// streamLock held. A keyframe sent recently and not yet decoded is still on its way: on Wi-Fi a
+    /// ~500 KB keyframe takes ~300 ms at 15 Mbit/s, and re-requests during that time (every 100 ms from the
+    /// Display, plus idle recovery) produced 5-7 keyframes per 2 s, saturating the link.
+    private func keyframeInFlight(now: UInt64) -> Bool {
+        guard let k = lastKeyframeSent, k.id > highestDecoded else { return false }
+        let window = UInt64((2 * hostRttMs + Double(MSConstants.keyframeInFlightMs)) * 1000)
+        return now &- k.at < window
+    }
+
     /// Control queue, every 10 ms: idle-screen recovery.
     private func recoveryTick() {
         guard !ended, let enc = encoder else { return }
@@ -591,11 +673,13 @@ public final class HostSession {
         var force = false
         streamLock.lock()
         if keyframePendingSince == nil, lastSentFrameId > highestDecoded,
-           now &- lastProgress >= 200_000,
-           now &- lastForcedKeyframe >= UInt64(MSConstants.keyframeMinIntervalMs) * 1000 {
+           now &- lastProgress >= UInt64(MSConstants.hostRecoveryStallMs) * 1000,
+           now &- lastForcedKeyframe >= UInt64(MSConstants.keyframeMinIntervalMs) * 1000,
+           !keyframeInFlight(now: now) {
             lastForcedKeyframe = now
             keyframePendingSince = now
             force = true
+            st.keyframeReqRecovery += 1
         }
         if let at = keyframePendingSince, now &- at >= 50_000, lastCaptureArrival < at, let b = lastBuffer {
             resend = b
@@ -620,6 +704,7 @@ public final class HostSession {
         audioCapture?.stop(); audioCapture = nil
         recoveryTimer?.cancel(); recoveryTimer = nil
         pingTimer?.cancel(); pingTimer = nil
+        statsTimer?.cancel(); statsTimer = nil
         streamLock.lock()
         streamActive = false
         lastBuffer = nil
@@ -643,3 +728,21 @@ public final class HostSession {
 }
 
 extension HostSession: @unchecked Sendable {}
+
+/// Per-window counters for the `host-stats` log line.
+struct HostStatsWindow {
+    var captured: UInt64 = 0
+    var droppedBusy: UInt64 = 0
+    var skippedDivisor: UInt64 = 0
+    var encodeIn: UInt64 = 0
+    var encodeOut: UInt64 = 0
+    var keyframesOut: UInt64 = 0
+    var encodeMs: [Double] = []
+    var framesSent: UInt64 = 0
+    var bytes: UInt64 = 0
+    var maxFrameBytes: UInt64 = 0
+    var nacks: UInt64 = 0
+    var retransmits: UInt64 = 0
+    var keyframeReqDisplay: UInt64 = 0
+    var keyframeReqRecovery: UInt64 = 0
+}

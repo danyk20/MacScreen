@@ -23,6 +23,14 @@ public struct RateController {
     public static let fecLowerLoss = 0.002
     public static let fecLowerAfterMicros: UInt64 = 10_000_000
     public static let floorToFps30Micros: UInt64 = 5_000_000
+    /// Packet loss (pre-FEC) above which one evaluation alone backs off.
+    public static let heavyLoss = 0.10
+    /// Queueing delay (smoothed RTT above the slowly drifting minimum) that backs off / blocks ramp-up.
+    /// Measured on Wi-Fi: at ~30 Mbit/s the hotspot queued up to 2.5 s of RTT with little packet loss.
+    public static let queueDelayBadMs = 80.0
+    public static let queueDelayGoodMs = 30.0
+    /// The RTT baseline drifts up by this much per evaluation so a route change is relearned.
+    public static let baseRttDriftMs = 0.5
 
     public let profileBitrate: Int
     /// The link default: FEC never drops below this.
@@ -38,6 +46,8 @@ public struct RateController {
     private var prev: FeedbackPacket?
     private var lowLossSince: UInt64?
     private var floorSince: UInt64?
+    private var prevFramesLost = false
+    private var baseRttMs: Double?
 
     public init(profileBitrate: Int, linkFecRatio: Double) {
         self.profileBitrate = max(MSConstants.minBitrate, profileBitrate)
@@ -49,7 +59,9 @@ public struct RateController {
     public var initialBitrate: Int { max(MSConstants.minBitrate, Int(Double(profileBitrate) * Self.startShare)) }
 
     /// Returns the new settings when an evaluation ran and something changed, else nil.
-    public mutating func ingest(_ fb: FeedbackPacket, nowMicros now: UInt64) -> Output? {
+    /// `rttMs`: the Host's smoothed RTT to the Display, if known (delay-based congestion signal; the
+    /// feedback `jitterMs` is not measured by the Display yet).
+    public mutating func ingest(_ fb: FeedbackPacket, nowMicros now: UInt64, rttMs: Double? = nil) -> Output? {
         guard let last = lastEval, let p = prev else {
             lastEval = now
             prev = fb
@@ -66,13 +78,24 @@ public struct RateController {
         let loss = total > 0 ? lost / total : 0
         let framesLost = (fb.framesDropped &- p.framesDropped) > 0
         let jitter = fb.jitterMs
+        var queueDelay = 0.0
+        if let r = rttMs, r >= 0 {
+            let base = min(r, (baseRttMs ?? r) + Self.baseRttDriftMs)
+            baseRttMs = base
+            queueDelay = r - base
+        }
 
         let before = Output(bitrate: bitrate, fecRatio: fecRatio, switchTo30fps: false)
 
-        // Bitrate.
-        if framesLost || jitter > Self.jitterBadMs {
+        // Bitrate. Measured on Wi-Fi (iMac, 2026-11-17): isolated frame losses (one per second or two,
+        // from burst loss, not congestion) drove x0.8 every second down to the 3 Mbit/s floor while
+        // packet loss stayed ~1%. Back off only on loss in two consecutive evaluations, heavy packet
+        // loss or bad jitter; a single lost frame just holds the bitrate.
+        let sustained = framesLost && prevFramesLost
+        prevFramesLost = framesLost
+        if sustained || loss > Self.heavyLoss || jitter > Self.jitterBadMs || queueDelay > Self.queueDelayBadMs {
             bitrate = max(MSConstants.minBitrate, Int(Double(bitrate) * Self.backoffFactor))
-        } else if jitter < Self.jitterGoodMs {
+        } else if !framesLost, jitter < Self.jitterGoodMs, queueDelay < Self.queueDelayGoodMs {
             var cap = profileBitrate
             if let t = throughputCapBps { cap = min(cap, max(MSConstants.minBitrate, t)) }
             if bitrate < cap { bitrate = min(cap, Int(Double(bitrate) * Self.rampUpFactor)) }

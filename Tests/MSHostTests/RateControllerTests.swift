@@ -28,15 +28,36 @@ final class RateControllerTests: XCTestCase {
     }
 
     func testLossRampsDownToFloor() {
-        for _ in 0..<40 { second(framesLost: 1) }
+        for _ in 0..<41 { second(framesLost: 1) }
         XCTAssertEqual(rc.bitrate, MSConstants.minBitrate)
         _ = second(framesLost: 1)
         XCTAssertGreaterThanOrEqual(rc.bitrate, MSConstants.minBitrate)
     }
 
-    func testSingleLossMultipliesByPointEight() {
-        let o = second(framesLost: 1)
-        XCTAssertEqual(o?.bitrate, 19_200_000)
+    func testSingleLossHoldsConsecutiveLossMultipliesByPointEight() {
+        XCTAssertNil(second(framesLost: 1))
+        XCTAssertEqual(rc.bitrate, 24_000_000)
+        XCTAssertEqual(second(framesLost: 1)?.bitrate, 19_200_000)
+        XCTAssertNotNil(second())             // clean: ramps up again
+        XCTAssertNil(second(framesLost: 1))   // isolated again: hold
+    }
+
+    func testQueueingDelayBacksOffAndBlocksRampUp() {
+        t += 1_000_000
+        func fb() -> FeedbackPacket {
+            FeedbackPacket(highestDecodedFrame: 1, framesDecoded: 1, framesDropped: 0, fragsReceived: 0,
+                           fragsLost: 0, fragsRecovered: 0, avgDecodeMs: 0, jitterMs: 0, requestKeyframe: false)
+        }
+        _ = rc.ingest(fb(), nowMicros: t, rttMs: 20)            // baseline 20 ms, ramps up
+        t += 1_000_000
+        let b = rc.bitrate
+        XCTAssertNil(rc.ingest(fb(), nowMicros: t, rttMs: 70))   // +50 ms: hold
+        t += 1_000_000
+        XCTAssertEqual(rc.ingest(fb(), nowMicros: t, rttMs: 300)?.bitrate, Int(Double(b) * 0.8))
+    }
+
+    func testHeavyPacketLossBacksOffAlone() {
+        XCTAssertEqual(second(lost: 150)?.bitrate, 19_200_000)
     }
 
     func testHighJitterBacksOffMidJitterHolds() {
@@ -45,7 +66,7 @@ final class RateControllerTests: XCTestCase {
     }
 
     func testRecoveryRampsUpSlowlyAndCaps() {
-        for _ in 0..<10 { second(framesLost: 1) }
+        for _ in 0..<11 { second(framesLost: 1) }
         let low = rc.bitrate
         let o = second()
         XCTAssertEqual(o?.bitrate, Int(Double(low) * 1.05))

@@ -113,6 +113,12 @@ public final class DisplaySession {
         var wantsKeyframe = true                    // decode queue only
         var highestDecoded: UInt32 = 0              // decode queue only
         var framesDropped: UInt32 = 0               // decode queue only
+        // display-stats window (decode queue only).
+        var feedbackCount = 0
+        var nacksSent: UInt64 = 0
+        var kfRequestFeedbacks: UInt64 = 0
+        var decoderRejects: UInt64 = 0
+        var lastStat: (mc: MediaCounters, rc: Reassembler.Counters, decoded: UInt64, dropped: UInt32)?
         var closed = false                          // decode queue only
         var firstFragAt: [UInt32: UInt64] = [:]     // decode queue only: frameId -> first fragment arrival
 
@@ -369,6 +375,7 @@ public final class DisplaySession {
                     } catch {
                         Display_log("decoder rejected frame \(id): \(error)")
                         framesDropped &+= 1
+                        decoderRejects &+= 1
                         wantsKeyframe = true
                         process(reassembler.forceKeyframeResync(nowMicros: MonoClock.nowMicros()))
                     }
@@ -378,6 +385,7 @@ public final class DisplaySession {
                 case .frameLost:
                     framesDropped &+= 1
                 case .nack(let n):
+                    nacksSent &+= 1
                     media?.send(.nack, n.encode())
                 }
             }
@@ -400,6 +408,24 @@ public final class DisplaySession {
                                     avgDecodeMs: ms, jitterMs: 0,
                                     requestKeyframe: wantsKeyframe || reassembler.awaitingKeyframe)
             media?.send(.feedback, fb.encode())
+            if fb.requestKeyframe { kfRequestFeedbacks &+= 1 }
+            feedbackCount += 1
+            if feedbackCount % (2000 / MSConstants.feedbackIntervalMs) == 0 {
+                logStats(mc: mc, rc: c, decoded: UInt64(decoded))
+            }
+        }
+
+        /// Decode queue, every 2 s: one `display-stats` line with per-stage counts for the window.
+        func logStats(mc: MediaCounters, rc: Reassembler.Counters, decoded: UInt64) {
+            let p = lastStat ?? (MediaCounters(), Reassembler.Counters(), 0, 0)
+            lastStat = (mc, rc, decoded, framesDropped)
+            let line = "2s pkts rx=\(mc.packetsReceived &- p.mc.packetsReceived) lost=\(mc.packetsLost &- p.mc.packetsLost) "
+                + "rxMbps=\(String(format: "%.1f", Double(mc.bytesReceived &- p.mc.bytesReceived) * 8 / 2 / 1e6)) "
+                + "fecRecovered=\(rc.fragsRecovered &- p.rc.fragsRecovered) dup=\(rc.fragsDuplicate &- p.rc.fragsDuplicate) "
+                + "frames complete=\(rc.framesDelivered &- p.rc.framesDelivered) lost=\(rc.framesLost &- p.rc.framesLost) "
+                + "decoded=\(decoded &- p.decoded) dropped=\(framesDropped &- p.dropped) rejects=\(decoderRejects) "
+                + "nacks=\(nacksSent) kfReqFb=\(kfRequestFeedbacks) rtt=\(String(format: "%.0f", rttMs ?? -1))"
+            Log.logger("display-stats").notice("\(line, privacy: .public)")
         }
 
         // MARK: Teardown (control queue)

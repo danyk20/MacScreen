@@ -19,7 +19,13 @@ public final class DisplayCaptureSource: CursorAwareSource {
     public var capturedDisplayID: CGDirectDisplayID? { idLock.lock(); defer { idLock.unlock() }; return displayIDValue }
     private func setDisplayID(_ id: CGDirectDisplayID?) { idLock.lock(); displayIDValue = id; idLock.unlock() }
     private var virtualDisplay: VirtualDisplay?
-    private var capturer: ScreenCapturer?
+    private var capturer: ScreenCapturer? {
+        get { idLock.lock(); defer { idLock.unlock() }; return capturerValue }
+        set { idLock.lock(); capturerValue = newValue; idLock.unlock() }
+    }
+    private var capturerValue: ScreenCapturer?
+    /// SCK frame status counters (stats logging); nil before the capture started. Any thread.
+    public var captureCounters: ScreenCapturer.Counters? { capturer?.counters }
 
     public init(peer: PeerInfo, showsCursor: Bool = true) {
         self.peer = peer

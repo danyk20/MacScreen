@@ -246,11 +246,12 @@ final class ReassemblerTests: XCTestCase {
         let (_, f2) = try make(2, size: 1000, key: false)
         let ev = feed(r, f2, at: 20 * ms, rtt: 2)
         XCTAssertEqual(ev, [.nack(NackPacket(frameId: 1, blockIndex: 0, fragIndices: [0, 1]))])
-        XCTAssertEqual(r.tick(nowMicros: 25 * ms, rttMs: 2), [])     // deadline is 20 + 6 = 26 ms
-        XCTAssertEqual(r.tick(nowMicros: 26 * ms, rttMs: 2), [.frameLost(frameId: 1), .requestKeyframe])
+        let deadline = 20 * ms + UInt64((4 + MSConstants.nackWaitExtraMs) * 1000)   // 20 + 2 x rtt + extra
+        XCTAssertEqual(r.tick(nowMicros: deadline - ms, rttMs: 2), [])
+        XCTAssertEqual(r.tick(nowMicros: deadline, rttMs: 2), [.frameLost(frameId: 1), .requestKeyframe])
         XCTAssertTrue(r.awaitingKeyframe)
         XCTAssertEqual(r.counters.framesLost, 1)
-        XCTAssertEqual(r.tick(nowMicros: 40 * ms, rttMs: 2), [])
+        XCTAssertEqual(r.tick(nowMicros: deadline + 14 * ms, rttMs: 2), [])
     }
 
     func testNackListsIncompleteBlocksOnly() throws {
@@ -277,13 +278,15 @@ final class ReassemblerTests: XCTestCase {
         // Without a retransmission the missing frame is lost at the deadline.
         let r2 = try primed()
         XCTAssertEqual(feed(r2, f2, at: 20 * ms, rtt: 2).count, 1)
-        XCTAssertEqual(r2.tick(nowMicros: 26 * ms, rttMs: 2), [.frameLost(frameId: 1), .requestKeyframe])
+        XCTAssertEqual(r2.tick(nowMicros: 20 * ms + UInt64((4 + MSConstants.nackWaitExtraMs) * 1000), rttMs: 2),
+                       [.frameLost(frameId: 1), .requestKeyframe])
     }
 
     func testHighRttSkipsNack() throws {
         let r = try primed()
         let (_, f2) = try make(2, size: 1500, key: false)
-        XCTAssertEqual(feed(r, f2, at: 20 * ms, rtt: 12), [.frameLost(frameId: 1), .requestKeyframe])
+        XCTAssertEqual(feed(r, f2, at: 20 * ms, rtt: MSConstants.nackMaxRttMs + 1),
+                       [.frameLost(frameId: 1), .requestKeyframe])
     }
 
     // MARK: Stall
@@ -292,11 +295,12 @@ final class ReassemblerTests: XCTestCase {
         let r = try primed()
         let (p1, f1) = try make(1, size: 3000, key: false)
         feed(r, Array(f1.dropLast()), at: 100 * ms, rtt: 2)
-        XCTAssertEqual(r.tick(nowMicros: 130 * ms, rttMs: 2), [])    // not yet more than 30 ms
-        XCTAssertEqual(r.tick(nowMicros: 131 * ms, rttMs: 2),
+        let stall = 100 * ms + UInt64(MSConstants.frameStallTimeoutMs) * ms
+        XCTAssertEqual(r.tick(nowMicros: stall, rttMs: 2), [])    // not yet more than the stall timeout
+        XCTAssertEqual(r.tick(nowMicros: stall + ms, rttMs: 2),
                        [.nack(NackPacket(frameId: 1, blockIndex: 0, fragIndices: [2]))])
-        XCTAssertEqual(r.tick(nowMicros: 135 * ms, rttMs: 2), [])
-        let got = frameEvents(feed(r, [f1[2]], at: 136 * ms, rtt: 2))
+        XCTAssertEqual(r.tick(nowMicros: stall + 5 * ms, rttMs: 2), [])
+        let got = frameEvents(feed(r, [f1[2]], at: stall + 6 * ms, rtt: 2))
         XCTAssertEqual(got.first?.payload, p1)
     }
 
@@ -304,8 +308,9 @@ final class ReassemblerTests: XCTestCase {
         let r = try primed()
         let (_, f1) = try make(1, size: 3000, key: false)
         feed(r, Array(f1.dropLast()), at: 100 * ms)
-        XCTAssertEqual(r.tick(nowMicros: 130 * ms, rttMs: nil), [])
-        XCTAssertEqual(r.tick(nowMicros: 131 * ms, rttMs: nil), [.frameLost(frameId: 1), .requestKeyframe])
+        let stall = 100 * ms + UInt64(MSConstants.frameStallTimeoutMs) * ms
+        XCTAssertEqual(r.tick(nowMicros: stall, rttMs: nil), [])
+        XCTAssertEqual(r.tick(nowMicros: stall + ms, rttMs: nil), [.frameLost(frameId: 1), .requestKeyframe])
         XCTAssertTrue(r.awaitingKeyframe)
     }
 
@@ -313,8 +318,10 @@ final class ReassemblerTests: XCTestCase {
         let r = try primed()
         let (_, f1) = try make(1, size: 3000, key: false)
         feed(r, Array(f1.dropLast()), at: 100 * ms, rtt: 2)
-        XCTAssertEqual(r.tick(nowMicros: 131 * ms, rttMs: 2).count, 1)
-        XCTAssertEqual(r.tick(nowMicros: 137 * ms, rttMs: 2), [.frameLost(frameId: 1), .requestKeyframe])
+        let nackAt = 100 * ms + UInt64(MSConstants.frameStallTimeoutMs + 1) * ms
+        XCTAssertEqual(r.tick(nowMicros: nackAt, rttMs: 2).count, 1)
+        XCTAssertEqual(r.tick(nowMicros: nackAt + UInt64((4 + MSConstants.nackWaitExtraMs) * 1000), rttMs: 2),
+                       [.frameLost(frameId: 1), .requestKeyframe])
     }
 
     // MARK: Keyframe jump
