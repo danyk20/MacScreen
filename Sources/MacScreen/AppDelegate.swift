@@ -1,4 +1,5 @@
 import AppKit
+import MSHost
 import os
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -8,6 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var host: HostController?
     private var display: DisplayController?
+    /// Role-independent guard for the default output: a previous run may have quit while our device was default.
+    private let outputGuard = AudioOutputSwitcher(control: SystemAudioDevices())
+    private var signalSources: [DispatchSourceSignal] = []
     private let settingsModel = SettingsModel()
     private lazy var settingsWindow = SettingsWindowController(model: settingsModel)
 
@@ -18,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        outputGuard.restoreIfStranded()
+        installTerminationSignalHandlers()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.title = "MS"
         statusItem = item
@@ -36,8 +42,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        restoreAudioOutputOnQuit()
         host?.stop()
         display?.stop()
+    }
+
+    /// SIGTERM/SIGINT/SIGHUP: restore the output synchronously, then exit. SIGKILL and crashes cannot be caught;
+    /// the launch-time restoreIfStranded covers those.
+    private func installTerminationSignalHandlers() {
+        for sig in [SIGTERM, SIGINT, SIGHUP] {
+            signal(sig, SIG_IGN)
+            let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            src.setEventHandler { [weak self] in
+                self?.restoreAudioOutputOnQuit()
+                exit(0)
+            }
+            src.resume()
+            signalSources.append(src)
+        }
+    }
+
+    private func restoreAudioOutputOnQuit() {
+        host?.restoreAudioOnQuit()
+        outputGuard.restoreIfStranded()
     }
 
     private func startRole() {

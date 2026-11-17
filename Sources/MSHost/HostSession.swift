@@ -271,6 +271,14 @@ public final class HostSession {
         queue.async { [self] in finish(.stopped) }
     }
 
+    /// Stops the audio capture for the rest of this session (used when the user turns the sound off mid-session).
+    public func stopAudio() {
+        queue.async { [self] in
+            audioCapture?.stop()
+            audioCapture = nil
+        }
+    }
+
     // MARK: Control
 
     private func setState(_ s: HostSessionState) {

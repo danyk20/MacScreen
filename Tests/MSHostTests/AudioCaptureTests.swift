@@ -27,11 +27,28 @@ final class SyntheticAudioSource: AudioInputSource {
 
 final class FakeAudioDevices: AudioDeviceControlling {
     var devices: [String: AudioDeviceIdentifier] = [:]
+    var uids: [AudioDeviceIdentifier: String] = [1: "uid-1", 9: "uid-9", 2: "uid-2", 3: "uid-3"]
+    var builtIn: AudioDeviceIdentifier?
+    var nonVirtual: AudioDeviceIdentifier?
     var current: AudioDeviceIdentifier? = 1
     var setCalls: [AudioDeviceIdentifier] = []
     func deviceID(named name: String) -> AudioDeviceIdentifier? { devices[name] }
     func defaultOutput() -> AudioDeviceIdentifier? { current }
     func setDefaultOutput(_ id: AudioDeviceIdentifier) -> Bool { setCalls.append(id); current = id; return true }
+    func uid(of id: AudioDeviceIdentifier) -> String? { uids[id] }
+    func deviceID(uid: String) -> AudioDeviceIdentifier? { uids.first { $0.value == uid }?.key }
+    func builtInOutputDevice(excluding: AudioDeviceIdentifier) -> AudioDeviceIdentifier? {
+        builtIn == excluding ? nil : builtIn
+    }
+    func firstNonVirtualOutputDevice(excluding: AudioDeviceIdentifier) -> AudioDeviceIdentifier? {
+        nonVirtual == excluding ? nil : nonVirtual
+    }
+}
+
+/// A fresh UserDefaults suite so tests never touch the app's real preferences.
+private func isolatedDefaults() -> UserDefaults {
+    let name = "test.audio.\(UUID().uuidString)"
+    return UserDefaults(suiteName: name)!
 }
 
 final class AudioCaptureTests: XCTestCase {
@@ -62,7 +79,8 @@ final class AudioCaptureTests: XCTestCase {
     func testSwitcherRemembersAndRestoresOnlyIfStillDefault() throws {
         let f = FakeAudioDevices()
         f.devices["MacScreen Display"] = 9
-        let sw = AudioOutputSwitcher(control: f)
+        let defaults = isolatedDefaults()
+        let sw = AudioOutputSwitcher(control: f, defaults: defaults)
         XCTAssertTrue(sw.isDevicePresent)
         try sw.enable()
         XCTAssertEqual(f.current, 9)
@@ -79,11 +97,106 @@ final class AudioCaptureTests: XCTestCase {
 
     func testSwitcherMissingDeviceChangesNothing() {
         let f = FakeAudioDevices()
-        let sw = AudioOutputSwitcher(control: f)
+        let sw = AudioOutputSwitcher(control: f, defaults: isolatedDefaults())
         XCTAssertFalse(sw.isDevicePresent)
         XCTAssertThrowsError(try sw.enable()) { XCTAssertEqual($0 as? AudioSwitchError, .deviceNotFound) }
         sw.restore()
         XCTAssertTrue(f.setCalls.isEmpty)
         XCTAssertEqual(f.current, 1)
+    }
+
+    func testStrandedDefaultRestoresToPersistedUID() throws {
+        let f = FakeAudioDevices()
+        f.devices["MacScreen Display"] = 9
+        f.current = 9                                   // a previous run was killed while we were default
+        let defaults = isolatedDefaults()
+        defaults.set("uid-2", forKey: AudioOutputSwitcher.previousUIDKey)
+        let sw = AudioOutputSwitcher(control: f, defaults: defaults)
+        sw.restoreIfStranded()
+        XCTAssertEqual(f.current, 2)
+        XCTAssertNil(defaults.string(forKey: AudioOutputSwitcher.previousUIDKey))
+    }
+
+    func testStrandedDefaultFallsBackToBuiltInWhenNoPersistedUID() throws {
+        let f = FakeAudioDevices()
+        f.devices["MacScreen Display"] = 9
+        f.current = 9
+        f.builtIn = 3
+        f.nonVirtual = 2
+        let sw = AudioOutputSwitcher(control: f, defaults: isolatedDefaults())
+        sw.restoreIfStranded()
+        XCTAssertEqual(f.current, 3)
+    }
+
+    func testRestoreIfStrandedDoesNothingWhenOurDeviceIsNotDefault() throws {
+        let f = FakeAudioDevices()
+        f.devices["MacScreen Display"] = 9
+        f.current = 5                                   // user's own output
+        f.builtIn = 3
+        let defaults = isolatedDefaults()
+        defaults.set("uid-2", forKey: AudioOutputSwitcher.previousUIDKey)
+        let sw = AudioOutputSwitcher(control: f, defaults: defaults)
+        sw.restoreIfStranded()
+        XCTAssertTrue(f.setCalls.isEmpty)
+        XCTAssertEqual(f.current, 5)
+        XCTAssertEqual(defaults.string(forKey: AudioOutputSwitcher.previousUIDKey), "uid-2")
+    }
+
+    func testTurningSoundOffWhileActiveRestoresImmediately() throws {
+        let f = FakeAudioDevices()
+        f.devices["MacScreen Display"] = 9
+        let defaults = isolatedDefaults()
+        let sw = AudioOutputSwitcher(control: f, defaults: defaults)
+        try sw.enable()
+        XCTAssertEqual(f.current, 9)
+        sw.restore()                                    // what the toggle-off path calls mid-session
+        XCTAssertEqual(f.current, 1)
+        XCTAssertFalse(sw.isActive)
+        XCTAssertNil(defaults.string(forKey: AudioOutputSwitcher.previousUIDKey))
+    }
+
+    func testQuitWithStrandedDeviceRestoresEvenWhenNeverEnabled() throws {
+        // Sound setting off: this instance never enabled anything. The device is stranded from a previous run.
+        let f = FakeAudioDevices()
+        f.devices["MacScreen Display"] = 9
+        f.current = 9
+        f.builtIn = 3
+        let sw = AudioOutputSwitcher(control: f, defaults: isolatedDefaults())
+        XCTAssertFalse(sw.isActive)
+        sw.restore()                                    // quit path: no-op without an active switch
+        sw.restoreIfStranded()
+        XCTAssertEqual(f.current, 3)
+    }
+
+    func testLaunchAfterKilledRunRestoresPersistedOutput() throws {
+        let f = FakeAudioDevices()
+        f.devices["MacScreen Display"] = 9
+        let defaults = isolatedDefaults()
+        // First run: switched to our device, then killed (no restore ran).
+        let killed = AudioOutputSwitcher(control: f, defaults: defaults)
+        try killed.enable()
+        XCTAssertEqual(f.current, 9)
+        // Second run: a fresh instance sees our device as default and nothing active.
+        let launched = AudioOutputSwitcher(control: f, defaults: defaults)
+        launched.restoreIfStranded()
+        XCTAssertEqual(f.current, 1)
+        XCTAssertNil(defaults.string(forKey: AudioOutputSwitcher.previousUIDKey))
+    }
+
+    func testRestoreIfStrandedDoesNotRestoreWhileAudioIsActive() throws {
+        let f = FakeAudioDevices()
+        f.devices["MacScreen Display"] = 9
+        let defaults = isolatedDefaults()
+        let sw = AudioOutputSwitcher(control: f, defaults: defaults)
+        try sw.enable()
+        XCTAssertEqual(f.current, 9)
+        XCTAssertEqual(defaults.string(forKey: AudioOutputSwitcher.previousUIDKey), "uid-1")
+        f.setCalls = []
+        sw.restoreIfStranded()                          // session audio active: must leave our device in place
+        XCTAssertTrue(f.setCalls.isEmpty)
+        XCTAssertEqual(f.current, 9)
+        sw.restore()
+        XCTAssertEqual(f.current, 1)
+        XCTAssertNil(defaults.string(forKey: AudioOutputSwitcher.previousUIDKey))
     }
 }

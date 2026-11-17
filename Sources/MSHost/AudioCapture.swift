@@ -79,6 +79,12 @@ public protocol AudioDeviceControlling: AnyObject {
     func deviceID(named name: String) -> AudioDeviceIdentifier?
     func defaultOutput() -> AudioDeviceIdentifier?
     @discardableResult func setDefaultOutput(_ id: AudioDeviceIdentifier) -> Bool
+    func uid(of id: AudioDeviceIdentifier) -> String?
+    func deviceID(uid: String) -> AudioDeviceIdentifier?
+    /// First output device with built-in transport (speakers, internal display audio), excluding `excluding`.
+    func builtInOutputDevice(excluding: AudioDeviceIdentifier) -> AudioDeviceIdentifier?
+    /// First output device that is not a virtual transport, excluding `excluding`.
+    func firstNonVirtualOutputDevice(excluding: AudioDeviceIdentifier) -> AudioDeviceIdentifier?
 }
 
 public enum AudioSwitchError: Error, Equatable {
@@ -89,15 +95,20 @@ public enum AudioSwitchError: Error, Equatable {
 /// Makes the "MacScreen Display" device the system default output and puts the old one back.
 public final class AudioOutputSwitcher {
     public static let deviceName = "MacScreen Display"
+    /// UserDefaults key holding the UID of the output that was default before we switched.
+    public static let previousUIDKey = "audio.previousOutputUID"
 
     private let control: AudioDeviceControlling
     private let name: String
+    private let defaults: UserDefaults
     private var ours: AudioDeviceIdentifier?
     private var previous: AudioDeviceIdentifier?
 
-    public init(control: AudioDeviceControlling, deviceName: String = AudioOutputSwitcher.deviceName) {
+    public init(control: AudioDeviceControlling, deviceName: String = AudioOutputSwitcher.deviceName,
+                defaults: UserDefaults = .standard) {
         self.control = control
         self.name = deviceName
+        self.defaults = defaults
     }
 
     public var isDevicePresent: Bool { control.deviceID(named: name) != nil }
@@ -107,8 +118,11 @@ public final class AudioOutputSwitcher {
         if ours != nil { return }
         guard let dev = control.deviceID(named: name) else { throw AudioSwitchError.deviceNotFound }
         let current = control.defaultOutput()
-        if current != dev { previous = current }
+        // If we are already the default (stranded by an earlier crash), the real previous output is the persisted one.
+        let prev: AudioDeviceIdentifier? = current != dev ? current : persistedDevice(excluding: dev)
         guard control.setDefaultOutput(dev) else { previous = nil; throw AudioSwitchError.setFailed }
+        previous = prev
+        if let p = prev, let uid = control.uid(of: p) { defaults.set(uid, forKey: Self.previousUIDKey) }
         ours = dev
     }
 
@@ -118,8 +132,33 @@ public final class AudioOutputSwitcher {
         ours = nil
         let prev = previous
         previous = nil
-        if control.defaultOutput() == dev, let p = prev { control.setDefaultOutput(p) }
+        guard control.defaultOutput() == dev else { clearPersisted(); return }
+        revert(from: dev, to: prev)
     }
+
+    /// Startup and quit path: if our device is the default while no session audio is active (a previous run was
+    /// killed while switched), puts a real output back. Does nothing when our device is not the default.
+    public func restoreIfStranded() {
+        guard ours == nil, let dev = control.deviceID(named: name), control.defaultOutput() == dev else { return }
+        revert(from: dev, to: nil)
+    }
+
+    private func revert(from dev: AudioDeviceIdentifier, to prev: AudioDeviceIdentifier?) {
+        let target = prev.flatMap { $0 != dev ? $0 : nil }
+            ?? persistedDevice(excluding: dev)
+            ?? control.builtInOutputDevice(excluding: dev)
+            ?? control.firstNonVirtualOutputDevice(excluding: dev)
+        guard let t = target else { clearPersisted(); return }
+        if control.setDefaultOutput(t) { clearPersisted() }
+    }
+
+    private func persistedDevice(excluding dev: AudioDeviceIdentifier) -> AudioDeviceIdentifier? {
+        guard let uid = defaults.string(forKey: Self.previousUIDKey),
+              let id = control.deviceID(uid: uid), id != dev else { return nil }
+        return id
+    }
+
+    private func clearPersisted() { defaults.removeObject(forKey: Self.previousUIDKey) }
 }
 
 /// CoreAudio-backed implementation. Tests must not use this.
@@ -172,6 +211,53 @@ public final class SystemAudioDevices: AudioDeviceControlling {
         var dev = AudioDeviceID(id)
         return AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil,
                                           UInt32(MemoryLayout<AudioDeviceID>.size), &dev) == noErr
+    }
+
+    public static func uid(of id: AudioDeviceIdentifier) -> String? {
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceUID,
+                                              mScope: kAudioObjectPropertyScopeGlobal,
+                                              mElement: kAudioObjectPropertyElementMain)
+        var cf: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &cf) == noErr, let s = cf else { return nil }
+        return s.takeRetainedValue() as String
+    }
+
+    public static func transportType(of id: AudioDeviceIdentifier) -> UInt32? {
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyTransportType,
+                                              mScope: kAudioObjectPropertyScopeGlobal,
+                                              mElement: kAudioObjectPropertyElementMain)
+        var t: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &t) == noErr else { return nil }
+        return t
+    }
+
+    public static func hasOutputStreams(_ id: AudioDeviceIdentifier) -> Bool {
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams,
+                                              mScope: kAudioObjectPropertyScopeOutput,
+                                              mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(id, &addr, 0, nil, &size) == noErr else { return false }
+        return size > 0
+    }
+
+    public func uid(of id: AudioDeviceIdentifier) -> String? { Self.uid(of: id) }
+
+    public func deviceID(uid: String) -> AudioDeviceIdentifier? {
+        Self.allDevices().first { Self.uid(of: $0) == uid }
+    }
+
+    public func builtInOutputDevice(excluding: AudioDeviceIdentifier) -> AudioDeviceIdentifier? {
+        Self.allDevices().first {
+            $0 != excluding && Self.hasOutputStreams($0) && Self.transportType(of: $0) == kAudioDeviceTransportTypeBuiltIn
+        }
+    }
+
+    public func firstNonVirtualOutputDevice(excluding: AudioDeviceIdentifier) -> AudioDeviceIdentifier? {
+        Self.allDevices().first {
+            $0 != excluding && Self.hasOutputStreams($0) && Self.transportType(of: $0) != kAudioDeviceTransportTypeVirtual
+        }
     }
 }
 

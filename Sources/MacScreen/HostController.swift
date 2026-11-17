@@ -201,8 +201,15 @@ final class HostController: NSObject {
         linkCheck?.stop()
         pathMonitor.cancel()
         audioSwitcher.restore()
+        audioSwitcher.restoreIfStranded()
         power.setStreaming(false)
         browser.stop()
+    }
+
+    /// Quit and signal path (AppDelegate): returns the default output to the user's device, whatever the sound setting.
+    func restoreAudioOnQuit() {
+        audioSwitcher.restore()
+        audioSwitcher.restoreIfStranded()
     }
 
     // MARK: Menu
@@ -273,7 +280,10 @@ final class HostController: NSObject {
         if s.playsSoundOnDisplay {
             s.playSoundOnDisplay = false
             s.save()
-            if session == nil { audioSwitcher.restore() }
+            // Takes effect immediately, even mid-session: give the output back and stop capturing.
+            audioSwitcher.restore()
+            session?.stopAudio()
+            sessionHasAudio = false
         } else {
             guard audioSwitcher.isDevicePresent else {
                 _ = Dialogs.alert("Audio driver not installed",
