@@ -60,6 +60,11 @@ final class RateControllerTests: XCTestCase {
         XCTAssertEqual(second(lost: 150)?.bitrate, 19_200_000)
     }
 
+    func testStaleJitterWithoutMediaIsIgnored() {
+        XCTAssertNotEqual(second(received: 5, jitter: 28)?.bitrate, 19_200_000)
+        XCTAssertGreaterThanOrEqual(rc.bitrate, 24_000_000)
+    }
+
     func testHighJitterBacksOffMidJitterHolds() {
         XCTAssertEqual(second(jitter: 26)?.bitrate, 19_200_000)
         XCTAssertNil(second(jitter: 15))

@@ -109,6 +109,15 @@ Driver-Service helper (log: `log show --last 2m --predicate 'process == "coreaud
 Settings 'Display native (5K, static work)' (maxHeight 0) overrides the link-based 4K60 choice and gives 5120x2880@60 at only the link cap
 (~24 Mbit/s). User tried it while testing the Settings window; reset to the 4K option for normal use.
 
+### Frozen picture after sleep (fixed 2026-11-17 22:2x)
+Root cause: ScreenCaptureKit stops its stream when the Host's main display turns off ('stream stopped: Failed to find any displays or
+windows to capture'); nothing listened (onStopped), so the session stayed 'streaming' with sck=0/0/0; the streaming sleep assertion
+often prevents real system sleep so willSleep/didWake do not fire. Fix: CaptureWatchdog (restart at 2 s, recreate virtual display at 6 s,
+end session 'capture stalled' at 15 s; waits while screen asleep/locked; one silent-restart after 10 s on a static screen), WakeGate
+(wait for awake+unlocked screen, max 60 s), 1 s heartbeat re-sending the last frame, Display 'No signal - waiting for Host' badge after
+3 s, RateController ignores stale jitter when <100 fragments/window. Debug flag -msSimulateCaptureStall N. Live: simulated stall and one
+real pmset sleep cycle OK. Not tested live: display-off without system sleep (original path), waking with locked screen.
+
 ### Pending decision gates (Fable only, one question per call)
 G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
 G4 driver load result on macOS 27; G5 HDR spike.

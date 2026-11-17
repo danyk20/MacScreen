@@ -46,6 +46,8 @@ public struct HostSessionConfig {
     public var audioEnabled = false
     /// Test hook: replaces the AUHAL input on the "MacScreen Display" device.
     public var makeAudioSource: (() -> AudioInputSource)?
+    /// Capture watchdog input: main display awake and session unlocked (test hook).
+    public var screenAvailable: () -> Bool = { ScreenState.captureAvailable }
 
     public init() {}
 
@@ -105,6 +107,8 @@ public final class HostSession {
     public var onStateChange: ((HostSessionState) -> Void)?
     /// The Display shows a code; call `submitPairingCode` with what the user typed.
     public var onPairingCodeRequired: (() -> Void)?
+    /// The captured display was recreated by the capture watchdog (new display id).
+    public var onCapturedDisplayChanged: ((CGDirectDisplayID) -> Void)?
 
     private let stateLock = NSLock()
     private var stateValue = HostSessionState.idle
@@ -127,6 +131,11 @@ public final class HostSession {
     private var cursorTracker: CursorTracker?
     private var audioCapture: AudioCapture?
     private var recoveryTimer: DispatchSourceTimer?
+    private var watchdogTimer: DispatchSourceTimer?
+    private var watchdog = CaptureWatchdog()       // control queue
+    private var watchdogActionInFlight = false     // control queue
+    private var captureHealthy = false             // guarded by streamLock
+    private var lastHeartbeat: UInt64 = 0          // control queue
     private var pingTimer: DispatchSourceTimer?
     private let pingClock = PingClock()     // media queue only
     private let history = PacketHistory()
@@ -435,6 +444,7 @@ public final class HostSession {
                 self?.queue.async { [weak self] in
                     guard let self = self, !self.ended else { return }
                     self.setState(.streaming)
+                    self.startWatchdog()
                 }
             } catch {
                 self?.queue.async { self?.finish(.failure("source: \(error)")) }
@@ -485,6 +495,67 @@ public final class HostSession {
         stt.setEventHandler { [weak self] in self?.logStats() }
         statsTimer = stt
         stt.resume()
+    }
+
+    // MARK: Capture watchdog
+
+    private func startWatchdog() {
+        guard source is RecoverableCaptureSource, watchdogTimer == nil else { return }
+        let t = DispatchSource.makeTimerSource(queue: queue)
+        t.schedule(deadline: .now() + .milliseconds(500), repeating: .milliseconds(500))
+        t.setEventHandler { [weak self] in self?.watchdogTick() }
+        watchdogTimer = t
+        t.resume()
+    }
+
+    /// Control queue, every 500 ms.
+    private func watchdogTick() {
+        guard !ended, !watchdogActionInFlight, let src = source as? RecoverableCaptureSource,
+              let count = src.captureProgressCount else { return }
+        let now = Double(MonoClock.nowMicros()) / 1e6
+        let wasWaiting = watchdog.isWaitingForScreen
+        let running = src.isCaptureRunning
+        let action = watchdog.tick(now: now, frameCount: count, streamRunning: running,
+                                   screenAvailable: config.screenAvailable())
+        streamLock.lock(); captureHealthy = watchdog.isHealthy; streamLock.unlock()
+        if watchdog.isWaitingForScreen && !wasWaiting {
+            Self.log.notice("capture watchdog: screen asleep or locked, waiting")
+        }
+        switch action {
+        case .none:
+            return
+        case .endSession:
+            Self.log.error("capture watchdog: no frames after restart and display recreate, ending session")
+            finish(.failure("capture stalled: no frames from ScreenCaptureKit"))
+            return
+        case .restartCapture, .recreateDisplay:
+            break
+        }
+        let recreate = action == .recreateDisplay
+        Self.log.notice("capture watchdog: no frames (stream \(running ? "running" : "stopped", privacy: .public)), \(recreate ? "recreating virtual display" : "restarting capture", privacy: .public)")
+        watchdogActionInFlight = true
+        Task { [weak self] in
+            var failure: String?
+            do {
+                if recreate { try await src.recreateDisplay() } else { try await src.restartCapture() }
+            } catch {
+                failure = String(describing: error)
+            }
+            let id = (src as? CursorAwareSource)?.capturedDisplayID
+            self?.queue.async { [weak self] in
+                guard let self = self else { return }
+                self.watchdogActionInFlight = false
+                if let f = failure {
+                    Self.log.error("capture watchdog: \(recreate ? "recreate" : "restart", privacy: .public) failed: \(f, privacy: .public)")
+                } else {
+                    Self.log.notice("capture watchdog: \(recreate ? "recreate" : "restart", privacy: .public) done")
+                }
+                guard !self.ended else { return }
+                self.streamLock.lock(); self.keyframePendingSince = nil; self.streamLock.unlock()
+                self.encoder?.requestKeyframe()
+                if recreate, failure == nil, let id = id { self.onCapturedDisplayChanged?(id) }
+            }
+        }
     }
 
     /// Media queue, every 2 s: one `host-stats` line with per-stage frame counts for the window.
@@ -701,6 +772,15 @@ public final class HostSession {
             resend = b
             keyframePendingSince = nil
         }
+        // Heartbeat: a static screen yields only idle SCK frames, so nothing reaches the Display, which then
+        // could not tell "nothing changed" from "capture died". While capture is healthy, re-send the last
+        // picture once a second (a tiny P-frame); a dead capture sends nothing and the Display shows it.
+        if resend == nil, captureHealthy, let b = lastBuffer,
+           now &- lastCaptureArrival >= 1_000_000, now &- lastHeartbeat >= 1_000_000,
+           enc.pendingFrames == 0 {
+            resend = b
+            lastHeartbeat = now
+        }
         streamLock.unlock()
         if force { enc.requestKeyframe() }
         if let b = resend { enc.encode(b, captureTimeMicros: now) }
@@ -719,6 +799,7 @@ public final class HostSession {
         cursorTracker?.stop(); cursorTracker = nil
         audioCapture?.stop(); audioCapture = nil
         recoveryTimer?.cancel(); recoveryTimer = nil
+        watchdogTimer?.cancel(); watchdogTimer = nil
         pingTimer?.cancel(); pingTimer = nil
         statsTimer?.cancel(); statsTimer = nil
         streamLock.lock()

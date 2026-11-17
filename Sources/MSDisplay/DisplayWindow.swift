@@ -43,6 +43,7 @@ public final class DisplayWindow {
     private let view = DisplayContentView()
     private let rootLayer = CALayer()
     private let messageLayer = CATextLayer()
+    private let badgeLayer = CATextLayer()
     private var lastSize = CGSize.zero
     private var savedPresentation: NSApplication.PresentationOptions?
 
@@ -84,6 +85,15 @@ public final class DisplayWindow {
         messageLayer.contentsScale = backingScale
         messageLayer.isHidden = true
         rootLayer.addSublayer(messageLayer)
+
+        badgeLayer.alignmentMode = .center
+        badgeLayer.foregroundColor = NSColor(white: 1, alpha: 0.9).cgColor
+        badgeLayer.backgroundColor = NSColor(white: 0, alpha: 0.6).cgColor
+        badgeLayer.cornerRadius = 8
+        badgeLayer.fontSize = 15
+        badgeLayer.contentsScale = backingScale
+        badgeLayer.isHidden = true
+        rootLayer.addSublayer(badgeLayer)
 
         window.contentView = view
         view.onLayout = { [weak self] in self?.relayout() }
@@ -140,10 +150,26 @@ public final class DisplayWindow {
         CATransaction.commit()
     }
 
+    /// Small, non-intrusive status line at the top edge over the (kept) last picture; nil hides it.
+    public func showStatusBadge(_ text: String?) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if let text = text {
+            badgeLayer.string = text
+            badgeLayer.isHidden = false
+        } else {
+            badgeLayer.isHidden = true
+        }
+        layoutMessage()
+        CATransaction.commit()
+    }
+
     private func layoutMessage() {
         let b = rootLayer.bounds
         let h: CGFloat = 80
         messageLayer.frame = CGRect(x: 0, y: (b.height - h) / 2, width: b.width, height: h)
+        let bw: CGFloat = 320, bh: CGFloat = 26
+        badgeLayer.frame = CGRect(x: (b.width - bw) / 2, y: b.height - bh - 40, width: bw, height: bh)
     }
 
     private func relayout() {
@@ -153,6 +179,7 @@ public final class DisplayWindow {
         rootLayer.frame = view.bounds
         metalLayer.contentsScale = scale
         messageLayer.contentsScale = scale
+        badgeLayer.contentsScale = scale
         metalLayer.frame = rootLayer.bounds
         layoutMessage()
         CATransaction.commit()

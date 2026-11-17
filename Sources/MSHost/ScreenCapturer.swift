@@ -135,6 +135,18 @@ public final class ScreenCapturer: NSObject {
         await stopLocked()
     }
 
+    /// Stops the stream (if any) and starts a new one, resolving the display again through
+    /// `SCShareableContent`. `config` replaces the current one (e.g. a recreated virtual display).
+    public func restart(_ config: Config? = nil) async throws {
+        await gate.acquire()
+        defer { gate.release() }
+        await stopLocked()
+        if let config { lock.withLock { currentConfig = config } }
+        try await startLocked(lock.withLock { currentConfig })
+    }
+
+    public var config: Config { lock.withLock { currentConfig } }
+
     // MARK: Internals (call with gate held)
 
     private func startLocked(_ config: Config) async throws {
@@ -219,6 +231,7 @@ extension ScreenCapturer: SCStreamOutput {
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
                        of type: SCStreamOutputType) {
         guard type == .screen, CMSampleBufferIsValid(sampleBuffer) else { return }
+        if SimulatedStall.shared.dropsFrame() { return }
 
         var status: SCFrameStatus = .complete
         if let atts = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
@@ -272,5 +285,28 @@ extension ScreenCapturer: SCStreamDelegate {
         }
         log.error("stream stopped: \(error.localizedDescription, privacy: .public)")
         if let handler { captureQueue.async { handler(error) } }
+    }
+}
+
+/// Test hook `-msSimulateCaptureStall N`: 5 s after the first delivered frame, every SCK callback is
+/// dropped for N seconds (process-wide, once), as if the stream had silently died.
+final class SimulatedStall: @unchecked Sendable {
+    static let shared = SimulatedStall()
+    private let lock = NSLock()
+    private let seconds = UserDefaults.standard.double(forKey: "msSimulateCaptureStall")
+    private var window: (start: UInt64, end: UInt64)?
+
+    func dropsFrame() -> Bool {
+        guard seconds > 0 else { return false }
+        let now = MonoClock.nowMicros()
+        return lock.withLock {
+            if window == nil {
+                let start = now + 5_000_000
+                window = (start, start + UInt64(seconds * 1_000_000))
+                Log.logger("capture").notice("simulated capture stall armed: \(self.seconds, privacy: .public) s in 5 s")
+            }
+            guard let w = window else { return false }
+            return now >= w.start && now < w.end
+        }
     }
 }

@@ -22,6 +22,8 @@ public struct RateController {
     /// congestion signal, jitter only catches heavy contention.
     public static let jitterGoodMs = 10.0
     public static let jitterBadMs = 25.0
+    /// Fragments per evaluation window below which the jitter estimate is considered stale.
+    public static let minFragsForJitter = 100.0
     public static let fecRaiseLoss = 0.02
     public static let fecLowerLoss = 0.002
     public static let fecLowerAfterMicros: UInt64 = 10_000_000
@@ -98,7 +100,10 @@ public struct RateController {
         let total = received + lost
         let loss = total > 0 ? lost / total : 0
         let framesLost = (fb.framesDropped &- p.framesDropped) > 0
-        let jitter = fb.jitterMs
+        // The Display's jitter is a per-frame estimate: with (almost) no media in the window (static
+        // screen, heartbeat frames only, or a capture stall) it is a stale value from the last burst and
+        // drove x0.8 every second to the floor (measured 23 -> 3 Mbit/s after a capture recovery).
+        let jitter = received >= Self.minFragsForJitter ? fb.jitterMs : 0
         var queueDelay = 0.0
         if let r = rttMs, r >= 0 {
             let base = min(r, (baseRttMs ?? r) + Self.baseRttDriftMs)

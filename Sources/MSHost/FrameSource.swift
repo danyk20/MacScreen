@@ -29,3 +29,16 @@ public protocol CursorAwareSource: FrameSource {
     /// The captured (virtual) display, once it exists. Any thread.
     var capturedDisplayID: CGDirectDisplayID? { get }
 }
+
+/// A capture source whose stream can stall (ScreenCaptureKit) and be recovered by `HostSession`'s
+/// capture watchdog. Methods are called one at a time.
+public protocol RecoverableCaptureSource: FrameSource {
+    /// Cumulative frames delivered by the capture system (complete + idle); nil before start. Any thread.
+    var captureProgressCount: UInt64? { get }
+    /// False once the capture system stopped the stream on its own (e.g. all displays asleep). Any thread.
+    var isCaptureRunning: Bool { get }
+    /// Stops and starts the capture stream, resolving the display again.
+    func restartCapture() async throws
+    /// Destroys and recreates the captured (virtual) display, then restarts the capture on it.
+    func recreateDisplay() async throws
+}

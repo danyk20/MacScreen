@@ -91,6 +91,10 @@ final class HostController: NSObject {
             nc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
                 guard let self = self else { return }
                 self.session?.sendHostState(displayAsleep: false, mirroring: self.mirror.isMirroring)
+                self.pollWakeGate()
+            },
+            nc.addObserver(forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.pollWakeGate()
             },
             nc.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
                 self?.hostWillSleep()
@@ -122,7 +126,10 @@ final class HostController: NSObject {
     /// `bye` + teardown (ControlChannel.close sends bye; the source destroys the virtual display).
     private func hostWillSleep() {
         asleep = true
-        resumeTargetAfterWake = policy.sleepResumeTarget
+        // Sleeping again while the wake gate still waits keeps the pending resume target.
+        resumeTargetAfterWake = policy.sleepResumeTarget ?? (wakeGate != nil ? resumeTargetAfterWake : nil)
+        wakeGate = nil
+        wakeGateGeneration += 1
         reconnectGeneration += 1  // cancel pending re-checks
         guard let s = session else { return }
         mirror.detach()
@@ -130,10 +137,44 @@ final class HostController: NSObject {
         update("Sleeping")
     }
 
-    /// Re-arm the policy; the Display must be seen again (browser restarted) and the settle delay must pass.
+    private var wakeGate: WakeGate?
+    private var wakeGateGeneration = 0
+
+    /// Capture cannot start while the main display sleeps or the session is locked (SCShareableContent lists
+    /// no displays), so the resume waits for both, bounded by `WakeGate.timeout`.
     private func hostDidWake() {
         asleep = false
-        guard let id = resumeTargetAfterWake else { return }
+        guard resumeTargetAfterWake != nil else { return }
+        wakeGate = WakeGate(startedAt: now())
+        wakeGateGeneration += 1
+        update("Waiting for screen\u{2026}")
+        pollWakeGate()
+    }
+
+    /// Main thread; also called on screensDidWake / sessionDidBecomeActive.
+    private func pollWakeGate() {
+        guard let gate = wakeGate, !asleep else { return }
+        let asleepNow = ScreenState.mainDisplayAsleep, locked = ScreenState.sessionLocked
+        switch gate.decide(now: now(), screenAsleep: asleepNow, locked: locked) {
+        case .wait:
+            wakeGateGeneration += 1
+            let gen = wakeGateGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + WakeGate.pollInterval) { [weak self] in
+                guard let self = self, gen == self.wakeGateGeneration else { return }
+                self.pollWakeGate()
+            }
+        case .proceed, .timedOut:
+            let waited = now() - gate.startedAt
+            Self.log.notice("wake gate: \(asleepNow || locked ? "timed out" : "screen ready", privacy: .public) after \(String(format: "%.1f", waited), privacy: .public) s (asleep=\(asleepNow) locked=\(locked))")
+            wakeGate = nil
+            wakeGateGeneration += 1
+            resumeAfterWake()
+        }
+    }
+
+    /// Re-arm the policy; the Display must be seen again (browser restarted) and the settle delay must pass.
+    private func resumeAfterWake() {
+        guard let id = resumeTargetAfterWake, !asleep else { return }
         resumeTargetAfterWake = nil
         displays = []
         browser.stop()
@@ -407,6 +448,13 @@ final class HostController: NSObject {
         s.onPairingCodeRequired = { [weak self, weak s] in
             DispatchQueue.main.async { if let s = s { self?.askForCode(s, displayName: d.name) } }
         }
+        s.onCapturedDisplayChanged = { [weak self, weak s] id in
+            DispatchQueue.main.async {
+                guard let self = self, let s = s, s === self.session else { return }
+                self.mirror.detach()
+                self.mirror.attach(displayID: id)
+            }
+        }
         session = s
         connectedTo = d
         s.connect(to: d.endpoint)
@@ -415,6 +463,9 @@ final class HostController: NSObject {
 
     @objc private func disconnect() {
         policy.userDisconnect()
+        wakeGate = nil
+        wakeGateGeneration += 1
+        resumeTargetAfterWake = nil
         reconnectGeneration += 1
         mirror.detach()
         session?.stop()
