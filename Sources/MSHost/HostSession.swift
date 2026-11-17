@@ -664,9 +664,8 @@ public final class HostSession {
                                                 fecRatio: RateController.frameFecRatio(fec, isKeyframe: f.isKeyframe))
             history.record(frameId: id, fragments: frags, nowMicros: MonoClock.nowMicros())
             let datagrams = frags.map { ($0.type, $0.fragment.encode()) }
-            let wireBits = Double(datagrams.reduce(0) { $0 + $1.1.count }) * 8
-            let paceBps = max(Double(MSConstants.pacingRateBps), 2.5 * Double(bitrateNow))
-            let paceMicros = max(4000, UInt64(wireBits / paceBps * 1e6))
+            let paceMicros = RateController.paceMicros(wireBytes: datagrams.reduce(0) { $0 + $1.1.count },
+                                                       bitrate: bitrateNow)
             m.sendBatch(datagrams, paceOverMicros: paceMicros)
         } catch {
             Self.log.error("fragment failed: \(String(describing: error), privacy: .public)")

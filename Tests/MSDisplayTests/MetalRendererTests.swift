@@ -213,4 +213,27 @@ final class DisplayWindowDialogTests: XCTestCase {
         XCTAssertLessThan(inside.rawValue, NSWindow.Level.modalPanel.rawValue)
         XCTAssertEqual(w.level, fullScreen)
     }
+
+    // MARK: Smooth (vsync) mode (Provisional decision P2)
+
+    func testPresentOptionsVsyncFromSettingsAndDeveloperOverride() {
+        let d = UserDefaults(suiteName: "ms.test.\(UUID().uuidString)")!
+        XCTAssertFalse(PresentOptions.fromDefaults(d).vsync)                       // default off
+        XCTAssertTrue(PresentOptions.fromDefaults(d, settingsVsync: true).vsync)   // Settings toggle
+        d.set(false, forKey: "msRenderVsync")
+        XCTAssertFalse(PresentOptions.fromDefaults(d, settingsVsync: true).vsync)  // developer override wins
+        d.set(true, forKey: "msRenderVsync")
+        XCTAssertTrue(PresentOptions.fromDefaults(d, settingsVsync: false).vsync)
+    }
+
+    func testSetVsyncSwitchesAttachedLayer() throws {
+        let r = try MetalRenderer()
+        let layer = CAMetalLayer()
+        r.attach(layer: layer, drawableSize: CGSize(width: 64, height: 64))
+        XCTAssertFalse(layer.displaySyncEnabled)
+        r.setVsync(true)
+        XCTAssertTrue(layer.displaySyncEnabled); XCTAssertTrue(r.presentOptions.vsync)
+        r.setVsync(false)
+        XCTAssertFalse(layer.displaySyncEnabled); XCTAssertFalse(r.presentOptions.vsync)
+    }
 }

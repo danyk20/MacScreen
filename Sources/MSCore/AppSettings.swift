@@ -26,6 +26,12 @@ public struct AppSettings: Codable, Equatable {
     public var playSoundOnDisplay: Bool?
     public var playsSoundOnDisplay: Bool { playSoundOnDisplay ?? false }
 
+    /// Display: "Smooth (vsync) mode" (Provisional decision P2). Off by default: vsync off cut the render stage
+    /// from ~35 to ~7 ms on the iMac and no tearing was reported; tearing-sensitive users can turn it on.
+    /// Optional so settings stored before this field still decode.
+    public var smoothVsync: Bool?
+    public var smoothVsyncMode: Bool { smoothVsync ?? false }
+
     public init() {}
 
     public static let heightOptions = [0, 2160, 1440, 1080, 720]

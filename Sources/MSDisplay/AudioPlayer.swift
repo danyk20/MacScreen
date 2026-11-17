@@ -69,7 +69,7 @@ public final class AudioPlayer {
         public var silencePackets = 0       // inserted for gaps
     }
 
-    public init(output: AudioOutput, targetMs: Int = 40, clock: @escaping () -> UInt64 = MonoClock.nowMicros) {
+    public init(output: AudioOutput, targetMs: Int = MSConstants.audioTargetBufferMs, clock: @escaping () -> UInt64 = MonoClock.nowMicros) {
         self.output = output
         self.clock = clock
         targetFrames = MSConstants.audioSampleRate * targetMs / 1000

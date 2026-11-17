@@ -28,7 +28,8 @@ public struct RendererCounters {
 /// Measured on the iMac 5K (HEVC 4K60, Wi-Fi): vsync off cuts decode->present p50 from ~34 ms to ~7 ms
 /// (capture->present p50 76 -> 53 ms); 3 drawables and a stream-sized drawable gave no gain.
 public struct PresentOptions: Equatable {
-    /// `CAMetalLayer.displaySyncEnabled`. Off by default (lowest latency; may tear); `msRenderVsync YES` restores it.
+    /// `CAMetalLayer.displaySyncEnabled`. Off by default (lowest latency; may tear). Settings "Smooth (vsync) mode"
+    /// turns it on; the developer override `msRenderVsync` (if set) wins over the setting.
     public var vsync: Bool = false
     /// `CAMetalLayer.maximumDrawableCount` (2 or 3).
     public var drawables: Int = 2
@@ -36,8 +37,9 @@ public struct PresentOptions: Equatable {
     public var streamSizedDrawable: Bool = false
     public init() {}
 
-    public static func fromDefaults(_ d: UserDefaults = .standard) -> PresentOptions {
+    public static func fromDefaults(_ d: UserDefaults = .standard, settingsVsync: Bool = false) -> PresentOptions {
         var o = PresentOptions()
+        o.vsync = settingsVsync
         if d.object(forKey: "msRenderVsync") != nil { o.vsync = d.bool(forKey: "msRenderVsync") }
         let n = d.integer(forKey: "msRenderDrawables")
         if n == 2 || n == 3 { o.drawables = n }
@@ -118,6 +120,15 @@ public final class MetalRenderer {
         withLock { self.layer = layer; self.options = options }
         log.info("present options vsync=\(options.vsync) drawables=\(options.drawables) streamSized=\(options.streamSizedDrawable)")
     }
+
+    /// Switches vsync on the attached layer (Settings "Smooth (vsync) mode"); takes effect with the next drawable.
+    public func setVsync(_ on: Bool) {
+        let l: CAMetalLayer? = withLock { options.vsync = on; return layer }
+        l?.displaySyncEnabled = on
+        log.info("present vsync=\(on)")
+    }
+
+    public var presentOptions: PresentOptions { withLock { options } }
 
     public func updateDrawableSize(_ size: CGSize) {
         let (l, o) = withLock { (layer, options) }

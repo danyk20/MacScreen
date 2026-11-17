@@ -53,12 +53,12 @@ final class DisplayController {
     private static let log = Log.logger("display-app")
 
     init(store: IdentityStore, caps: CapabilitiesMessage, windowed: Bool, stats: Bool,
-         latencyCSV: String? = nil) throws {
+         latencyCSV: String? = nil, smoothVsync: Bool = false) throws {
         latencyCSVPath = latencyCSV
         window = DisplayWindow(windowed: windowed)
         renderer = try MetalRenderer()
         renderer.attach(layer: window.metalLayer, drawableSize: window.drawablePixelSize,
-                        colour: ColourPlan(panelIsP3: caps.wideColor), options: PresentOptions.fromDefaults())
+                        colour: ColourPlan(panelIsP3: caps.wideColor), options: PresentOptions.fromDefaults(settingsVsync: smoothVsync))
         window.onResize = { [renderer] size in renderer.updateDrawableSize(size) }
         let rs = RendererSink(renderer: renderer, window: window)
         rs.onAskAllow = { [window] host, done in
@@ -84,6 +84,12 @@ final class DisplayController {
             overlay = StatsOverlay(corner: .bottomLeft, anchor: { [window] in window.frame }) { [weak self] in self?.statsText() ?? "" }
             overlay?.show()
         }
+    }
+
+    /// Settings "Smooth (vsync) mode"; applies immediately. The `msRenderVsync` developer override still wins.
+    func setSmoothVsync(_ on: Bool) {
+        let v = PresentOptions.fromDefaults(settingsVsync: on).vsync
+        if v != renderer.presentOptions.vsync { renderer.setVsync(v) }
     }
 
     func setStatsOverlay(_ on: Bool) {

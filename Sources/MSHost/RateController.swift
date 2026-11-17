@@ -42,6 +42,14 @@ public struct RateController {
     /// the keyframe alone costs ~0.03 s and lets the Display rebuild most losses without a NACK round trip.
     public static let keyframeFecExtra = 0.10
 
+    /// Send-pacing span for one frame (Provisional decision P2, G3: size-scaled pacing kept). The frame's packets
+    /// are spread at max(`pacingRateBps`, 2.5 x bitrate), over at least 4 ms: a ~450 KB keyframe at 30 Mbit/s
+    /// takes ~48 ms instead of a ~1 Gbit/s burst that lost 20-40 packets on Wi-Fi; a ~70 KB P-frame stays at ~7 ms.
+    public static func paceMicros(wireBytes: Int, bitrate: Int) -> UInt64 {
+        let paceBps = max(Double(MSConstants.pacingRateBps), 2.5 * Double(bitrate))
+        return max(4000, UInt64(Double(wireBytes) * 8 / paceBps * 1e6))
+    }
+
     /// FEC ratio for one frame: the current ratio, raised for keyframes.
     public static func frameFecRatio(_ base: Double, isKeyframe: Bool) -> Double {
         isKeyframe ? min(MSConstants.fecRatioMax, base + keyframeFecExtra) : base

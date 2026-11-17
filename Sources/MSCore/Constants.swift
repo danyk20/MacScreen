@@ -32,7 +32,9 @@ public enum MSConstants {
     public static let audioSampleRate = 48000
     public static let audioChannels = 2
     public static let audioFramesPerPacket = 240
-    public static let audioTargetBufferMs = 25
+    /// Display audio jitter buffer target. Provisional decision P2 (G3): 40 ms (was 25 in the plan); verified
+    /// live on the iMac Wi-Fi link with good quality and sync. 25 ms leaves no room for Wi-Fi bursts (recv p95 22 ms).
+    public static let audioTargetBufferMs = 40
     public static let bitsPerPixelHEVC = 0.06
     public static let bitsPerPixelH264 = 0.09
     /// Floor used by the setup test: a candidate only qualifies if its bitrate at this density fits the link.

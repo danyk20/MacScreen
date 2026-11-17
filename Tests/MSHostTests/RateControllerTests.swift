@@ -151,4 +151,12 @@ final class RateControllerTests: XCTestCase {
         XCTAssertEqual(RateController.frameFecRatio(0.0, isKeyframe: true), 0.10, accuracy: 1e-9)
         XCTAssertEqual(RateController.frameFecRatio(0.25, isKeyframe: true), MSConstants.fecRatioMax)
     }
+
+    /// Provisional decision P2: size-scaled pacing, at least 4 ms, at max(60 Mbit/s, 2.5 x bitrate).
+    func testPacingIsSizeScaled() {
+        XCTAssertEqual(RateController.paceMicros(wireBytes: 10_000, bitrate: 30_000_000), 4000)          // small: floor
+        XCTAssertEqual(RateController.paceMicros(wireBytes: 450_000, bitrate: 30_000_000), 48_000)       // 4K keyframe at 75 Mbit/s
+        XCTAssertEqual(RateController.paceMicros(wireBytes: 450_000, bitrate: 10_000_000), 60_000)       // 60 Mbit/s floor rate
+        XCTAssertLessThan(RateController.paceMicros(wireBytes: 70_000, bitrate: 30_000_000), 1_000_000 / 60) // P-frame within a frame interval
+    }
 }

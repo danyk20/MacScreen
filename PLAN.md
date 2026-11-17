@@ -149,7 +149,7 @@ every rebuild. A stable identity keeps the permission across rebuilds.
 | `maxParityFragsPerBlock` | 32 |
 | `fecRatioWiFi` / `fecRatioWired` | 0.10 / 0.0 (adaptive range 0…0.30) |
 | `packetHistoryMs` | 500 |
-| `nackMaxRttMs` | 8 (NACK used only when RTT is below this) |
+| `nackMaxRttMs` | 100 (NACK used only when RTT is below this; was 8, P1/P2) |
 | `reassemblyMaxFrames` | 8 |
 | `keyframeMinIntervalMs` | 250 |
 | `feedbackIntervalMs` | 100 |
@@ -157,11 +157,12 @@ every rebuild. A stable identity keeps the permission across rebuilds.
 | `controlKeepaliveS` / `controlTimeoutS` | 1 / 5 |
 | `cursorPollHz` / `cursorShapePollHz` | 120 / 20 |
 | `audioSampleRate` / channels / frames per packet | 48000 / 2 / 240 (5 ms, s16le) |
-| `audioTargetBufferMs` | 25 |
+| `audioTargetBufferMs` | 40 (was 25; P2) |
 | `bitsPerPixelHEVC` / `bitsPerPixelH264` | 0.06 / 0.09 (per pixel per frame) |
 | `minBitsPerPixelHEVC` / `minBitsPerPixelH264` | 0.04 / 0.06 (link-fit check in 6.10 step 4) |
 | `minBitrate` | 3 000 000 bit/s |
 | `linkBudgetShare` | 0.6 of measured throughput |
+| `pacingRateBps` | 60 000 000 (frame packets spread at max(this, 2.5 × bitrate), at least 4 ms; P2) |
 | `vendorID` / `productID` | 0x4D53 / 0x0001 |
 
 ## 6. Specifications
@@ -327,26 +328,26 @@ Receiver rules (Display):
 - Keep at most 8 frames in assembly. A block is complete with any `k` of its `k+m`
   fragments; a frame is complete when all blocks are.
 - Frames are decoded strictly in `frameId` order.
-- If frame N is incomplete when frame N+1 completes: if RTT < 8 ms send one NACK per
-  incomplete block and wait up to `2 × RTT + 2 ms`; otherwise, or on timeout, mark N lost.
+- If frame N is incomplete when frame N+1 completes: if RTT < 100 ms send one NACK per
+  incomplete block and wait up to `2 × RTT + 20 ms`; otherwise, or on timeout, mark N lost.
 - After a lost frame: set `awaitingKeyframe`, send feedback with `requestKeyframe`
   immediately (repeat every 100 ms), discard all non-keyframes, keep showing the last
   good picture.
 Host rules: keep sent fragments for 500 ms (`PacketHistory`) and answer NACKs from it;
 honour keyframe requests at most once per 250 ms; spread each frame's packets evenly
-over up to 4 ms (pacing).
+at max(60 Mbit/s, 2.5 × bitrate), over at least 4 ms (size-scaled pacing, P2).
 
 Rate control (`RateController`, evaluated once per second from feedback):
-start at 60 % of the profile bitrate; if unrecovered loss is 0 and jitter < 5 ms, +5 %
+start at 60 % of the profile bitrate (P1: min(profile, 0.6 × link throughput)); if unrecovered loss is 0 and jitter < 10 ms, +5 %
 (cap = profile bitrate, also ≤ 0.6 × measured throughput); if any frame was lost or
-jitter > 10 ms, ×0.8 (floor 3 Mbit/s). FEC ratio: pre-FEC loss > 2 % → +0.05 (max 0.30);
+jitter > 25 ms (P1), ×0.8 (floor 3 Mbit/s). FEC ratio: pre-FEC loss > 2 % → +0.05 (max 0.30);
 < 0.2 % for 10 s → −0.05 (min: link default). At the floor for 5 s → switch to 30 fps
 (`reconfigure`). Resolution is never changed automatically during a session.
 
 ### 6.7 Rendering (`MSDisplay`)
 Borderless window covering the main screen (window mode with `--windowed`), content view
 backed by `CAMetalLayer`: `pixelFormat = .bgra8Unorm` (`.bgr10a2Unorm` for 10-bit),
-`colorspace = sRGB`, `displaySyncEnabled = true`, `maximumDrawableCount = 2`,
+`colorspace = sRGB`, `displaySyncEnabled = false` (P2; Settings "Smooth (vsync) mode" on the Display turns it on), `maximumDrawableCount = 2`,
 `framebufferOnly = true`, `drawableSize` = panel pixel size.
 Decoded NV12 buffers are wrapped with `CVMetalTextureCache` (plane 0 `.r8Unorm`, plane 1
 `.rg8Unorm`); the fragment shader converts BT.709 video range to RGB and samples with
@@ -379,9 +380,9 @@ Host `AudioCapture`: open the device's input with an AUHAL unit, convert to s16l
 240-frame packets (type 3). Needs `NSMicrophoneUsageDescription` (macOS asks once).
 Menu toggle "Play sound on Display" sets the system default output to the device and
 remembers the previous one; on disconnect, if the device is still default, restore it.
-Display `AudioPlayer`: AUHAL output pulling from an SPSC ring buffer, target fill 25 ms.
-Underrun → silence until refilled to target. Fill > target + 15 ms → drop 5 ms with a
-2 ms crossfade. Missing packet → silence for that packet.
+Display `AudioPlayer`: AUHAL output pulling from an SPSC ring buffer, target fill 40 ms (P2; was 25).
+Underrun → silence until refilled to target. Drift: `DriftController` resamples gently toward the
+target and skips frames only on gross overflow. Missing packet → silence for that packet.
 
 ### 6.10 Auto-configuration (`MSProbe`)
 Candidates are generated from the Display's panel pixel size `P`: encode scales {1.0, 0.75, 0.625, 0.5} × P.
@@ -595,6 +596,44 @@ router queued up to 2.5 s of RTT, ~137 gaps >50 ms per 60 s, each 450-650 KB key
 Open for Fable: intra-refresh or LTR instead of full keyframes on loss (architecture), a Display jitter
 buffer / present pacing for the remaining p95, and whether the link check should also re-run on a sustained
 queueing-delay back-off.
+
+**Provisional decision P2 (Gate G3 + P1 review, 2026-11-18, Opus, to be reviewed by Fable).** Fable out of credits.
+Tuning only, reversible, no wire-format change, HEVC kept. Wired CSV still missing: wired values below are unchanged
+defaults, not measurements. Data (live, iMac 5K over Wi-Fi): good link "Beachclub" HEVC 4K60 30 Mbit/s, 62 s motion:
+60 fps in every 10 s window, capture->present p50 60 / p95 141 ms, render 6.4, decode 4.7, encode ~20-28 ms, recv p50
+6.8 / p95 22 ms, pre-arrival p50 40 / p95 116 ms, present gaps >50 ms 134, >100 ms 56, >200 ms 3 per 74 s, link check
+52 Mbit/s, 1 NACK and 0 keyframes per minute, RFC 3550 jitter 5-15 ms. Old hotspot: 15-20 Mbit/s, RTT 15-180 ms,
+56 -> 18 keyframes/min after P1. Flaky evening: check chose 3200x1800@60 @ 18 Mbit/s, later 4K60 again.
+1. *Audio target buffer 40 ms* (was 25 in 6.9/section 5; code already used 40). Verified live as good quality and sync;
+   25 ms is close to the video recv p95 (22 ms), so Wi-Fi bursts would underrun. `MSConstants.audioTargetBufferMs`
+   is now 40 and `AudioPlayer` defaults to it.
+2. *No Display video jitter buffer (not built).* Offline replay of the measured CSVs (playout at rolling 2 s minimum
+   delay + B): B = 20 ms cut >50 ms gaps by 13-33 % and >100 ms gaps by 15-53 % across 4 runs (live3: 129 -> 87,
+   51 -> 24) for +0-11 ms p50 / +18 ms p95 latency, but still left 87-142 gaps >50 ms per ~70 s; B = 10 ms gave
+   only 4-20 %. The gaps are Wi-Fi delivery stalls of 50-200 ms that a 0-20 ms buffer cannot hide; the benefit is
+   not clear enough for the latency and a timed present path. Re-open only with wired/5 GHz data showing gaps of
+   17-40 ms dominating.
+3. *FEC defaults kept:* wired 0.0, Wi-Fi 0.10; adaptive +0.05 per evaluation while pre-FEC loss > 2 %, -0.05 after
+   10 s below 0.2 %, range link default...0.30; keyframes +0.10 (cap 0.30). Good Wi-Fi at 0.10 needed 1 NACK and
+   0 keyframes per minute.
+4. *Pacing kept, size-scaled:* frame packets at max(60 Mbit/s, 2.5 x bitrate), at least 4 ms
+   (`RateController.paceMicros`): ~48 ms for a 450 KB keyframe at 30 Mbit/s, 4-8 ms for P-frames.
+5. *Vsync default off; Settings "Smooth (vsync) mode" on the Display* (`AppSettings.smoothVsync`, applies
+   immediately via `MetalRenderer.setVsync`; developer override `msRenderVsync` still wins). Vsync off cut render
+   35 -> 7 ms; no tearing reported, but tearing-sensitive users get a one-click way back (+~28 ms).
+6. *Ladder / start format kept:* G1 ladder with P1 link fit (0.04 bpp within 0.6 x throughput): >= ~33 Mbit/s ->
+   4K60 (good link: 52 -> 4K60 @ 30), ~25 -> 3200x1800@60 (flaky: @ 18), ~18 -> 2560x1440@60. 3200x1800 saves only
+   ~4 ms of encode, so it is not the default on good links.
+7. *P1 verdict: accept unchanged* - link check on every connect (~2 s, picked the right format on all three link
+   states), start bitrate and ceiling 0.6 x throughput, jitter thresholds 10/25 ms (Wi-Fi RFC 3550 5-15 ms would
+   back off needlessly at 5/10), NACK below 100 ms RTT (repaired the only loss on good Wi-Fi), keyframe suppression
+   (in flight 2 x RTT + 400 ms, recovery stall 400 ms; hotspot keyframes 56 -> 18/min). Section 5/6.6 updated.
+8. *Next loss-recovery mechanism: none now.* Good Wi-Fi: 0 keyframes/min, so intra-refresh/LTR would buy nothing on
+   the target link. The hotspot's 18/min is handled by the link check choosing a lower format/bitrate. LTR in
+   VideoToolbox also needs the low-latency rate-control mode that HEVC here avoids (12 vs 21 ms per 4K frame).
+   Re-open (Fable) if a link the check accepted shows > 6 keyframes/min sustained.
+Still open for Fable: re-run the link check on sustained queueing back-off; wired G3 CSV (M3 exit targets p95 < 30 ms
+are not reachable on this Wi-Fi: p95 141 ms is network-bound).
 
 ## 10. Verification
 

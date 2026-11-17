@@ -135,8 +135,8 @@ G4 driver load result on macOS 27; G5 HDR spike.
    playback + clap test.
 
 ### Known gaps / unverified live
-- Audio buffer target: AudioPlayer uses 40 ms, MSConstants.audioTargetBufferMs and PLAN 6.9 say
-  25 ms; reconcile at G3.
+- Audio buffer target reconciled to 40 ms everywhere (Provisional decision P2, 2026-11-18). G3 decided
+  provisionally as P2 in PLAN.md (Opus, needs Fable review); Display Settings has 'Smooth (vsync) mode'.
 - Dev-cert codesign can hang waiting for a keychain prompt (Always Allow once).
 - ScreenCapturerTests skip when the main display is asleep/locked; never seen capturing in tests.
 - Never run live: sleep/wake teardown+reconnect, mirror toggle, cursor overlay, settings UI,

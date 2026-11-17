@@ -38,6 +38,8 @@ private struct Scenario {
     var seed: UInt64
     /// Uniform extra one-way delay per packet, 0 ... jitterMicros.
     var jitterMicros: Double = 3000
+    /// Round-trip time of the link (one-way = half).
+    var rttMs: Double = 3
 }
 
 private struct Decoded {
@@ -88,10 +90,10 @@ private func meanAbsDiff(_ a: [UInt8], _ b: [UInt8]) -> Double {
 
 private final class Simulator {
     // Channel model.
-    let oneWayMicros: UInt64 = 1500
+    var oneWayMicros: UInt64 { UInt64(scenario.rttMs * 500) }
     var jitterMicros: Double { scenario.jitterMicros }
     var jitter = InterarrivalJitter()
-    let rttMs = 3.0
+    var rttMs: Double { scenario.rttMs }
     let fps = 60
     let frameCount: Int
     let width = 1280, height = 720
@@ -252,9 +254,11 @@ private final class Simulator {
                                                 captureTimeMicros: f.captureTimeMicros,
                                                 fecRatio: RateController.frameFecRatio(fec, isKeyframe: f.isKeyframe))
             history.record(frameId: id, fragments: frags, nowMicros: now)
-            // Pace evenly over 4 ms.
+            // Pace with the Host rule (Provisional decision P2: size-scaled, at least 4 ms).
+            let wireBytes = frags.reduce(0) { $0 + $1.fragment.encode().count }
+            let span = RateController.paceMicros(wireBytes: wireBytes, bitrate: rate.initialBitrate)
             for (n, o) in frags.enumerated() {
-                let sentAt = now + UInt64(n) * 4000 / UInt64(frags.count)
+                let sentAt = now + UInt64(n) * span / UInt64(frags.count)
                 transmit(type: o.type, data: o.fragment.encode(), sentAt: sentAt, countForFeedback: true)
             }
         } catch {
@@ -440,5 +444,22 @@ final class NetworkSimulatorTests: XCTestCase {
         XCTAssertGreaterThan(j, 4)
         XCTAssertLessThan(j, RateController.jitterBadMs)
         XCTAssertFalse(r.bitrates.contains { $0 < 6_000_000 * 6 / 10 }, "jitter alone must not back off")
+    }
+
+    /// Provisional decision P2 (G3): the "good Wi-Fi" link measured live (Beachclub, 2026-11-17: RTT ~30 ms,
+    /// RFC 3550 jitter 5-15 ms, 1 NACK and 0 keyframes per minute). With the P2 defaults (Wi-Fi FEC 0.10, keyframes
+    /// +0.10, NACK below 100 ms RTT, size-scaled pacing) rare loss is repaired without a single extra keyframe.
+    func testGoodWiFiNeedsNoKeyframes() throws {
+        let s = Scenario(name: "good-wifi", lossRate: 0.003, seed: 11, jitterMicros: 15_000, rttMs: 30)
+        try check(s, requireZeroLoss: true)
+    }
+
+    /// Above the NACK RTT limit (100 ms, like the old hotspot's RTT spikes) loss is repaired by FEC or a
+    /// keyframe only; the picture still recovers within 500 ms.
+    func testHighRttWithoutNackStillRecovers() throws {
+        let s = Scenario(name: "hotspot-rtt", lossRate: 0.01, seed: 13, jitterMicros: 20_000, rttMs: 140)
+        try check(s, requireZeroLoss: false)
+        let r = try runScenario(s)
+        XCTAssertEqual(r.nacks, 0, "no NACKs above nackMaxRttMs")
     }
 }

@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsModel.onChange = { [weak self] s in
             self?.host?.setStatsOverlay(s.statsOverlay)
             self?.display?.setStatsOverlay(s.statsOverlay)
+            self?.display?.setSmoothVsync(s.smoothVsyncMode)
         }
         startRole()
         if role != nil { NSApp.activate(ignoringOtherApps: true) }
@@ -95,7 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .display:
                 display = try DisplayController(store: store, caps: caps, windowed: options.windowed,
                                            stats: options.stats || settingsModel.settings.statsOverlay,
-                                           latencyCSV: options.latencyCSV)
+                                           latencyCSV: options.latencyCSV,
+                                           smoothVsync: settingsModel.settings.smoothVsyncMode)
             }
         } catch {
             log.error("Start failed: \(String(describing: error), privacy: .public)")

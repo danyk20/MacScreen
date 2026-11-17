@@ -63,6 +63,15 @@ private struct SettingsView: View {
                     }
                 }
             }
+            if role == .display {
+                Section(header: Text("Picture").font(.headline)) {
+                    Toggle("Smooth (vsync) mode", isOn: Binding(
+                        get: { model.settings.smoothVsyncMode },
+                        set: { model.settings.smoothVsync = $0 }))
+                    Text("Removes tearing during fast motion; adds about 25 ms of latency. Applies immediately.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            }
             Section(header: Text("General").font(.headline)) {
                 Toggle("Show stats overlay", isOn: $model.settings.statsOverlay)
                 Toggle("Launch at login", isOn: $model.settings.launchAtLogin)

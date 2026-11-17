@@ -194,4 +194,10 @@ final class AudioPlayerTests: XCTestCase {
         XCTAssertLessThan(p.fillMs, 80)
         XCTAssertGreaterThan(p.fillMs, 10)
     }
+
+    func testDefaultTargetIsPlanConstant() {
+        // Provisional decision P2: one value (40 ms) in PLAN 6.9, MSConstants and the player default.
+        XCTAssertEqual(MSConstants.audioTargetBufferMs, 40)
+        XCTAssertEqual(AudioPlayer(output: FakeAudioOutput()).targetBufferMs, 40, accuracy: 0.01)
+    }
 }

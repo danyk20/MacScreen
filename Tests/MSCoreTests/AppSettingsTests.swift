@@ -29,4 +29,21 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(c.fps, 60); XCTAssertEqual(c.codec, "hevc"); XCTAssertEqual(c.cursorMode, "embedded")
         XCTAssertFalse(c.hdr); XCTAssertEqual(c.bitrateCapMbps, 0)
     }
+
+    func testSmoothVsyncDefaultsOffAndRoundTrips() {
+        let d = freshDefaults()
+        XCTAssertFalse(AppSettings.load(from: d).smoothVsyncMode)
+        var s = AppSettings(); s.smoothVsync = true; s.save(to: d)
+        XCTAssertTrue(AppSettings.load(from: d).smoothVsyncMode)
+    }
+
+    func testOldSettingsWithoutVsyncFieldDecode() throws {
+        let d = freshDefaults()
+        var s = AppSettings(); s.fps = 30; s.save(to: d)
+        var obj = try XCTUnwrap(JSONSerialization.jsonObject(with: d.data(forKey: AppSettings.defaultsKey)!) as? [String: Any])
+        obj.removeValue(forKey: "smoothVsync")
+        d.set(try JSONSerialization.data(withJSONObject: obj), forKey: AppSettings.defaultsKey)
+        let l = AppSettings.load(from: d)
+        XCTAssertEqual(l.fps, 30); XCTAssertFalse(l.smoothVsyncMode)
+    }
 }
