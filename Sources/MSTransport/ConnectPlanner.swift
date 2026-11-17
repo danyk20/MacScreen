@@ -1,7 +1,9 @@
 import Foundation
 import Network
+import MSCore
 
-private final class DoneFlag: @unchecked Sendable { var done = false }
+private final class DoneFlag: @unchecked Sendable { var done = false; var last = "setup" }
+private let connectLog = Log.logger("transport")
 
 /// One step of the interface preference order (PLAN.md section 7, Lifecycle).
 public struct ConnectAttempt: Equatable, @unchecked Sendable {
@@ -56,11 +58,21 @@ public struct ConnectPlanner {
                 lock.lock()
                 if flag.done { lock.unlock(); return }
                 flag.done = true
+                let last = flag.last
                 lock.unlock()
+                // Which attempt failed and how (timeout vs. waiting/failed with an error) -- the session
+                // only reports "could not connect", so this is the one place the cause is visible.
+                let iface = attempt.interface.map { "\($0)" } ?? "any"
+                if ok {
+                    connectLog.info("connect \(String(describing: endpoint), privacy: .public) via \(iface, privacy: .public): ready")
+                } else {
+                    connectLog.notice("connect \(String(describing: endpoint), privacy: .public) via \(iface, privacy: .public) (\(attempt.timeout, privacy: .public) s) failed; last state \(last, privacy: .public)")
+                }
                 if ok { conn.stateUpdateHandler = nil } else { conn.stateUpdateHandler = nil; conn.cancel() }
                 cont.resume(returning: ok ? conn : nil)
             }
             conn.stateUpdateHandler = { state in
+                lock.lock(); flag.last = "\(state)"; lock.unlock()
                 switch state {
                 case .ready: finish(true)
                 case .failed, .cancelled: finish(false)
