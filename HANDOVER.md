@@ -97,13 +97,17 @@ dropped replies to new TCP connections (listener queue full of SYN_RCVD; ssh por
 timed out). Not a MacScreen bug. Fix on the iMac (user): quit/disconnect CyberGhost or disable its on-demand, or
 exclude local networks. Check before connecting: `ssh iMac5K 'scutil --nc list'`.
 
-### Audio driver (Gate G4 PASSED 2026-11-17 22:0x: ad-hoc signed driver loads on macOS 27, device 'MacScreen Display' visible; end-to-end sound to iMac still to test)
+### Audio driver (Gate G4 PASSED 2026-11-17 22:0x: ad-hoc signed driver loads on macOS 27, device 'MacScreen Display' visible; end-to-end sound to iMac VERIFIED by user 2026-11-17: works, good quality and sync; mic permission prompt appears on first use; setting applies from next connection; still to do: 30-min playback test, clap test)
 First install loaded but the device never appeared: Driver-Service log said 'dlsym cannot find symbol MacScreenAudio_Create'
 (-fvisibility=hidden hid the factory). Fixed with visibility("default"); AudioDriver/tests/driver_harness.c (74 selectors x 6
 objects + IO loopback) runs on every build. User must reinstall: `Scripts/install-audio-driver.sh` (sudo), then
 `system_profiler SPAudioDataType | grep -A3 'MacScreen Display'`. Remaining risk: macOS 27 may reject the ad-hoc signature in the
 Driver-Service helper (log: `log show --last 2m --predicate 'process == "coreaudiod" OR process CONTAINS "Driver"'`); then sign with
 'MacScreen Dev' or Developer ID.
+
+### Settings gotcha
+Settings 'Display native (5K, static work)' (maxHeight 0) overrides the link-based 4K60 choice and gives 5120x2880@60 at only the link cap
+(~24 Mbit/s). User tried it while testing the Settings window; reset to the 4K option for normal use.
 
 ### Pending decision gates (Fable only, one question per call)
 G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
