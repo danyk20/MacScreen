@@ -80,6 +80,15 @@ iMac state: app in ~/Applications/MacScreen.app (user osx, ssh alias iMac5K), no
   keepalives); authenticated frames up to 64 MB (low); NACK amplification for empty block 0 (low);
   Reassembler frame ID not wrap-safe at 2^32 (info); identity dir mode 0755 (info).
 
+### Live verified on the iMac (2026-11-17 evening)
+- Final build streams 4K60: presented exactly 60 fps in every 10 s window under continuous motion; capture->present
+  p50 60 / p95 141 ms; render 6.4 ms; decode 4.7 ms; link check 52 Mbit/s -> 4K60 @30 Mbit/s; another connection on
+  a worse moment of the link chose 3200x1800@60 @18 Mbit/s (policy works). Wi-Fi was flaky at times (ping up to 278 ms,
+  two 'could not connect' retries) - keep the iMac screen awake (caffeinate -u -t 2 over ssh before connecting).
+- Cursor overlay mode (--cursor overlay) verified by user: cursor, shapes, leaving the display all fine.
+- Still not verified live: sleep/wake, mirror toggle, settings window, setup-test UI, login item, audio, tearing
+  (user did not report tearing; vsync stays off), G3/G4/G5, Fable review of P1.
+
 ### Pending decision gates (Fable only, one question per call)
 G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
 G4 driver load result on macOS 27; G5 HDR spike.
