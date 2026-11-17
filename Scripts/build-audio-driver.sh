@@ -29,6 +29,18 @@ done
 mkdir -p "$OUT/Contents/MacOS"
 lipo -create "$TMP/MacScreenAudio.arm64" "$TMP/MacScreenAudio.x86_64" -output "$OUT/Contents/MacOS/MacScreenAudio"
 cp "$SRC/Info.plist" "$OUT/Contents/Info.plist"
+
+echo "Checking the factory symbol is exported in every architecture"
+for ARCH in arm64 x86_64; do
+    if ! nm -gU -arch "$ARCH" "$OUT/Contents/MacOS/MacScreenAudio" | grep -q " _MacScreenAudio_Create$"; then
+        echo "ERROR: _MacScreenAudio_Create is not exported ($ARCH); coreaudiod could not load the driver." >&2
+        exit 1
+    fi
+done
+
+echo "Running driver harness (loads the bundle and drives the AudioServerPlugIn interface)"
+"${CC[@]}" -framework CoreAudio -framework CoreFoundation -o "$TMP/driver_harness" "$SRC/tests/driver_harness.c"
+"$TMP/driver_harness" "$OUT"
 rm -rf "$TMP"
 
 if [[ -n "${MACSCREEN_SIGN_ID:-}" ]]; then

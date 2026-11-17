@@ -192,6 +192,7 @@ static OSStatus GetProp(AudioObjectID obj, const AudioObjectPropertyAddress *a, 
         case kAudioObjectPropertyOwnedObjects: case kAudioPlugInPropertyDeviceList:
             list[0] = kObjectDevice; return PutList(list, 1, inSize, outSize, outData);
         case kAudioPlugInPropertyTranslateUIDToDevice: {
+            if (outData == NULL) { *outSize = sizeof(AudioObjectID); return kAudioHardwareNoError; }
             if (qualSize != sizeof(CFStringRef) || qual == NULL) return kAudioHardwareBadPropertySizeError;
             CFStringRef uid = MakeString(kDeviceUID);
             Boolean match = CFEqual(*(CFStringRef *)qual, uid);
@@ -402,9 +403,12 @@ static OSStatus Drv_GetPropertyDataSize(AudioServerPlugInDriverRef d, AudioObjec
 }
 static OSStatus Drv_GetPropertyData(AudioServerPlugInDriverRef d, AudioObjectID o, pid_t pid, const AudioObjectPropertyAddress *a,
                                     UInt32 qs, const void *q, UInt32 inSize, UInt32 *outSize, void *outData) {
-    if (a == NULL || outSize == NULL || outData == NULL) return kAudioHardwareIllegalOperationError;
+    if (a == NULL || outSize == NULL) return kAudioHardwareIllegalOperationError;
     if (!ObjectExists(o)) return kAudioHardwareBadObjectError;
     if (!HasProp(o, a)) return kAudioHardwareUnknownPropertyError;
+    // The host may pass a NULL buffer for a property whose size is 0 (empty owned-object lists).
+    UInt64 scratch = 0;
+    if (outData == NULL) { inSize = 0; outData = &scratch; }
     return GetProp(o, a, qs, q, inSize, outSize, outData);
 }
 static OSStatus Drv_SetPropertyData(AudioServerPlugInDriverRef d, AudioObjectID o, pid_t pid, const AudioObjectPropertyAddress *a,
@@ -511,8 +515,10 @@ static ULONG Drv_Release(void *self) {
     ULONG r = gRefCount; pthread_mutex_unlock(&gStateMutex); return r;
 }
 
-// Factory named in Info.plist (CFPlugInFactories).
-void *MacScreenAudio_Create(CFAllocatorRef allocator, CFUUIDRef requestedTypeUUID) {
+// Factory named in Info.plist (CFPlugInFactories). Must have default visibility: the driver is
+// built with -fvisibility=hidden, and a hidden symbol cannot be exported by -exported_symbol, so
+// CFPlugIn's dlsym would fail ("Cannot find function pointer MacScreenAudio_Create").
+__attribute__((visibility("default"))) void *MacScreenAudio_Create(CFAllocatorRef allocator, CFUUIDRef requestedTypeUUID) {
     if (!CFEqual(requestedTypeUUID, kAudioServerPlugInTypeUUID)) return NULL;
     return gDriverRef;
 }

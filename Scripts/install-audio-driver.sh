@@ -28,3 +28,8 @@ sudo cp -R "$SRC" "$DEST_DIR/"
 sudo chown -R root:wheel "$DEST"
 sudo killall coreaudiod || true
 echo "Installed. The device \"MacScreen Display\" should appear in Sound settings within a few seconds."
+echo
+echo "Check it registered:"
+echo "  system_profiler SPAudioDataType | grep -A3 'MacScreen Display'"
+echo "If nothing shows up, look for load errors (e.g. \"Cannot find function pointer\", code signing):"
+echo "  log show --last 2m --predicate 'process == \"coreaudiod\" OR process CONTAINS \"Driver-Service\"' | grep -i macscreen"
