@@ -37,7 +37,14 @@ public final class IdentityStore {
         let fm = FileManager.default
         fileURL = directory.appendingPathComponent("identity.json")
         do {
-            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true,
+                                   attributes: [.posixPermissions: 0o700])
+            // An existing directory keeps its mode through createDirectory: tighten it if we own it.
+            let attrs = try fm.attributesOfItem(atPath: directory.path)
+            if let owner = attrs[.ownerAccountID] as? NSNumber, owner.uint32Value == getuid(),
+               let mode = attrs[.posixPermissions] as? NSNumber, mode.intValue & 0o777 != 0o700 {
+                try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            }
         } catch { throw IdentityStoreError.io("\(error)") }
 
         if fm.fileExists(atPath: fileURL.path) {

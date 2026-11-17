@@ -74,9 +74,10 @@ iMac state: app in ~/Applications/MacScreen.app (user osx, ssh alias iMac5K), no
   1/fps -> 60 fps at 4K in loopback (0142e41). Encoder is not the limit (27 ms encMs is latency with 2 frames
   in flight). RE-CHECK 60 fps on the iMac. 3200x1800 would only save ~4 ms latency.
 - Security pass (fdccd2f): ~60 hostile-input/fuzz tests, 7 bugs fixed. Unfixed findings: device name/id/knowsPeer not in
-  signed transcript (low, changes wire transcript); Display DoS via unauthenticated connections holding the single
-  session slot up to 5 s + uncapped busyLinks (medium, LAN) - fixing next; pairRequest/pairConfirm Allow-dialog loop
-  from an unpaired Host (low); authenticated frames up to 64 MB (low); NACK amplification for empty block 0 (low);
+  signed transcript (low, changes wire transcript); (FIXED later: Display DoS via unauthenticated connections - 3 s handshake timeout, cap 4 unsecured links,
+  per-IP rate limit, only secured links take the session slot; Allow-dialog loop - one dialog per link, 60 s denial
+  cooldown; identity dir 0700. Still open: an unpaired Host that completed the handshake can hold the slot with
+  keepalives); authenticated frames up to 64 MB (low); NACK amplification for empty block 0 (low);
   Reassembler frame ID not wrap-safe at 2^32 (info); identity dir mode 0755 (info).
 
 ### Pending decision gates (Fable only, one question per call)

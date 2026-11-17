@@ -86,6 +86,53 @@ public final class DisplayAdvertiser {
     }
 }
 
+/// Per-remote-address limiter for new connections: `maxConnections` within `window` seconds blocks the
+/// address for `blockFor` seconds. The clock (seconds, monotonic) is injectable. Not thread safe: use on one queue.
+public struct ConnectionRateLimiter {
+    public var maxConnections = 10
+    public var window = 10.0
+    public var blockFor = 30.0
+    private let maxTracked = 1024
+    private let clock: () -> Double
+    private var times: [String: [Double]] = [:]
+    private var blockedUntil: [String: Double] = [:]
+
+    public init(maxConnections: Int = 10, window: Double = 10, blockFor: Double = 30,
+                clock: @escaping () -> Double = { Double(DispatchTime.now().uptimeNanoseconds) / 1e9 }) {
+        self.maxConnections = maxConnections
+        self.window = window
+        self.blockFor = blockFor
+        self.clock = clock
+    }
+
+    /// Records an attempt from `key`; false if it must be refused.
+    public mutating func allow(_ key: String) -> Bool {
+        let now = clock()
+        if let until = blockedUntil[key] {
+            if now < until { return false }
+            blockedUntil[key] = nil
+            times[key] = nil
+        }
+        if times.count >= maxTracked || blockedUntil.count >= maxTracked { prune(now) }
+        var t = (times[key] ?? []).filter { now - $0 < window }
+        t.append(now)
+        if t.count >= maxConnections {
+            blockedUntil[key] = now + blockFor
+            times[key] = nil
+            return false
+        }
+        times[key] = t
+        return true
+    }
+
+    private mutating func prune(_ now: Double) {
+        blockedUntil = blockedUntil.filter { $0.value > now }
+        times = times.filter { $0.value.contains { now - $0 < window } }
+        if times.count >= maxTracked { times.removeAll() }
+        if blockedUntil.count >= maxTracked { blockedUntil.removeAll() }
+    }
+}
+
 /// Host side: browses for Displays.
 public final class DisplayBrowser {
     private static let log = Log.logger("transport")

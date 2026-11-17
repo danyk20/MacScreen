@@ -48,6 +48,10 @@ public final class ControlChannel {
         return remoteHostValue
     }
 
+    /// Deadline for the handshake to complete (set before `start()`); the Display shortens it for
+    /// unauthenticated peers. Authenticated links keep `MSConstants.controlTimeoutS` for liveness.
+    public var handshakeTimeoutS: Double = MSConstants.controlTimeoutS
+
     private var started = false
     private var closed = false
     private var framer: ControlFramer = {
@@ -157,7 +161,7 @@ public final class ControlChannel {
         guard !closed else { return }
         let now = Self.now()
         if !isSecured {
-            if now - startTime >= MSConstants.controlTimeoutS { finish(.timeout, sendBye: false) }
+            if now - startTime >= handshakeTimeoutS { finish(.timeout, sendBye: false) }
             return
         }
         if now - lastRx >= MSConstants.controlTimeoutS {

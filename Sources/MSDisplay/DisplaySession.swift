@@ -8,6 +8,23 @@ import MSProbe
 import MSProtocol
 import MSTransport
 
+/// Abuse limits for connections to the Display (PLAN.md 6.5; security pass 2026-11-17). Not wire-visible.
+public struct DisplayLimits {
+    /// A handshake must finish within this many seconds, else the link is dropped.
+    public var handshakeTimeoutS = 3.0
+    /// Max concurrent links that are not yet secured; extra connections are closed immediately.
+    public var maxUnsecuredLinks = 4
+    /// Per-remote-IP new-connection limit: `rateMaxConnections` in `rateWindowS` -> refused for `rateBlockS`.
+    public var rateMaxConnections = 10
+    public var rateWindowS = 10.0
+    public var rateBlockS = 30.0
+    /// Loopback peers are local processes and are not rate limited (tests turn this off).
+    public var exemptLoopback = true
+    /// After a denied pairing, new pairing attempts from the same identity key are refused this long.
+    public var pairingDenyCooldownS = 60.0
+    public init() {}
+}
+
 /// Display side: advertises, accepts one Host at a time, pairs, receives and decodes video
 /// (PLAN.md section 8, T2.10).
 public final class DisplaySession {
@@ -21,12 +38,25 @@ public final class DisplaySession {
     fileprivate var current: Link?
     /// Capture->present latency and per-frame stage times (all connections of this session object).
     public let latency = LatencyRecorder()
-    private var busyLinks: [ObjectIdentifier: ControlChannel] = [:]
+    /// Links that have not been secured yet (control queue).
+    private var pendingLinks: [ObjectIdentifier: Link] = [:]
+    fileprivate let limits: DisplayLimits
+    fileprivate let clock: () -> Double
+    private var rateLimiter: ConnectionRateLimiter
+    /// Identity key -> time of the last denied pairing (control queue).
+    private var deniedPairings: [Data: Double] = [:]
 
-    public init(identityStore: IdentityStore, capabilities: CapabilitiesMessage, sink: DisplaySink) {
+    /// `clock` returns monotonic seconds; injectable for tests.
+    public init(identityStore: IdentityStore, capabilities: CapabilitiesMessage, sink: DisplaySink,
+                limits: DisplayLimits = DisplayLimits(),
+                clock: @escaping () -> Double = { Double(DispatchTime.now().uptimeNanoseconds) / 1e9 }) {
         self.store = identityStore
         self.capabilities = capabilities
         self.sink = sink
+        self.limits = limits
+        self.clock = clock
+        self.rateLimiter = ConnectionRateLimiter(maxConnections: limits.rateMaxConnections,
+                                                 window: limits.rateWindowS, blockFor: limits.rateBlockS, clock: clock)
     }
 
     /// TCP port of the control listener once ready.
@@ -45,8 +75,8 @@ public final class DisplaySession {
         advertiser = nil
         queue.async { [self] in
             current?.teardown()
-            for (_, c) in busyLinks { c.close() }
-            busyLinks.removeAll()
+            for (_, l) in pendingLinks { l.teardown() }
+            pendingLinks.removeAll()
         }
     }
 
@@ -58,26 +88,62 @@ public final class DisplaySession {
                               isKnownPeer: { store.isKnown(identityKey: $0) }, queue: queue)
     }
 
+    private static func isLoopback(_ conn: NWConnection) -> Bool {
+        guard case let .hostPort(host, _) = conn.endpoint else { return false }
+        switch host {
+        case .ipv4(let a): return a.isLoopback
+        case .ipv6(let a): return a.isLoopback
+        default: return false
+        }
+    }
+
     private func handleConnection(_ conn: NWConnection) {
-        if current != nil {
-            let ch = makeChannel(conn)
-            let key = ObjectIdentifier(ch)
-            busyLinks[key] = ch
-            ch.onSecured = { [weak ch] _ in
-                ch?.send(.bye(ByeMessage(reason: "busy")))
-                ch?.close()
+        if !(limits.exemptLoopback && Self.isLoopback(conn)) {
+            var key = "?"
+            if case let .hostPort(host, _) = conn.endpoint { key = "\(host)" }
+            if let pct = key.firstIndex(of: "%") { key = String(key[..<pct]) }  // drop IPv6 zone
+            guard rateLimiter.allow(key) else {
+                Self.log.notice("connection from \(key, privacy: .public) refused: rate limit")
+                conn.cancel()
+                return
             }
-            ch.onClosed = { [weak self] _ in self?.busyLinks[key] = nil }
-            ch.start()
+        }
+        guard pendingLinks.count < limits.maxUnsecuredLinks else {
+            Self.log.notice("connection refused: too many unsecured links")
+            conn.cancel()
             return
         }
-        let link = Link(owner: self, channel: makeChannel(conn))
-        current = link
+        // Every connection gets its own Link. Only a secured link claims the single session slot
+        // (`current`), so an unauthenticated peer can never occupy or bump it.
+        let ch = makeChannel(conn)
+        ch.handshakeTimeoutS = limits.handshakeTimeoutS
+        let link = Link(owner: self, channel: ch)
+        pendingLinks[ObjectIdentifier(link)] = link
         link.start()
     }
 
+    /// A link finished its handshake: it takes the session slot if free (control queue).
+    fileprivate func claim(_ l: Link) -> Bool {
+        pendingLinks[ObjectIdentifier(l)] = nil
+        if current != nil { return false }
+        current = l
+        return true
+    }
+
     fileprivate func linkEnded(_ l: Link) {
+        pendingLinks[ObjectIdentifier(l)] = nil
         if current === l { current = nil }
+    }
+
+    fileprivate func pairingAllowed(key: Data) -> Bool {
+        let now = clock()
+        deniedPairings = deniedPairings.filter { now - $0.value < limits.pairingDenyCooldownS }
+        return deniedPairings[key] == nil
+    }
+
+    fileprivate func pairingDenied(key: Data) {
+        if deniedPairings.count >= 256 { deniedPairings.removeAll() }
+        deniedPairings[key] = clock()
     }
 
     // MARK: One Host connection
@@ -97,6 +163,9 @@ public final class DisplaySession {
         var result: HandshakeResult?
         var paired = false
         var pairRequested = false
+        var allowPending = false      // an Allow dialog is open for this link
+        var pairingRefused = false    // denied or refused: ignore further pairing messages
+        var claimed = false           // holds the Display's session slot
         var ended = false
         var announced = false
         var media: MediaServer?
@@ -151,6 +220,15 @@ public final class DisplaySession {
         }
 
         func secured(_ r: HandshakeResult) {
+            guard !ended else { return }
+            guard owner?.claim(self) == true else {
+                Display_log("second host \(r.peerDeviceName): busy")
+                channel.send(.bye(ByeMessage(reason: "busy")))
+                teardown()
+                return
+            }
+            claimed = true
+            // Authenticated: normal liveness rules apply from here (ControlChannel keeps them).
             result = r
             paired = r.peerWasKnown
             Display_log("secured with \(r.peerDeviceName): known=\(r.peerWasKnown)")
@@ -168,12 +246,21 @@ public final class DisplaySession {
             guard let r = result else { return }
             switch m {
             case .pairRequest:
+                guard !paired, !allowPending, !pairingRefused else { return }
+                guard owner?.pairingAllowed(key: r.peerIdentityKey) ?? true else {
+                    Display_log("pairRequest from \(r.peerDeviceName): refused (recent denial)")
+                    pairingRefused = true
+                    channel.send(.bye(ByeMessage(reason: "pairing-denied")))
+                    teardown()
+                    return
+                }
                 pairRequested = true
                 Display_log("pairRequest from \(r.peerDeviceName): showing code")
                 sink.showPairingCode(r.pairingCode, hostName: r.peerDeviceName)
             case .pairConfirm:
-                guard pairRequested else { return }
+                guard pairRequested, !allowPending, !pairingRefused else { return }
                 pairRequested = false
+                allowPending = true
                 sink.hidePairingCode()
                 Display_log("pairConfirm from \(r.peerDeviceName): asking to allow")
                 sink.askAllow(hostName: r.peerDeviceName) { [weak self] accepted in
@@ -195,7 +282,12 @@ public final class DisplaySession {
 
         func pairingDecided(_ accepted: Bool) {
             Display_log("pairing decided: accepted=\(accepted) linkEnded=\(ended)")
+            allowPending = false
             guard !ended, let r = result else { return }
+            if !accepted {
+                pairingRefused = true
+                owner?.pairingDenied(key: r.peerIdentityKey)
+            }
             if accepted {
                 do {
                     try store.addPeer(Peer(deviceId: r.peerDeviceId, deviceName: r.peerDeviceName,
@@ -449,7 +541,7 @@ public final class DisplaySession {
                 dec?.invalidate()
             }
             channel.close()
-            sink.hidePairingCode()
+            if claimed { sink.hidePairingCode() }
             if announced { sink.sessionEnded() }
             owner?.linkEnded(self)
         }

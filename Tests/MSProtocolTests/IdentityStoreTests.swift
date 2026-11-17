@@ -76,4 +76,20 @@ final class IdentityStoreTests: XCTestCase {
     func testDefaultDirectory() {
         XCTAssertTrue(IdentityStore.defaultDirectory().path.hasSuffix("Application Support/MacScreen"))
     }
+
+    func testIdentityDirectoryIsMode0700() throws {
+        let fm = FileManager.default
+        func mode(_ u: URL) throws -> Int {
+            ((try fm.attributesOfItem(atPath: u.path))[.posixPermissions] as! NSNumber).intValue & 0o777
+        }
+        let base = fm.temporaryDirectory.appendingPathComponent("ms-mode-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: base) }
+        let fresh = base.appendingPathComponent("new")
+        _ = try IdentityStore(directory: fresh, defaultDeviceName: "x")
+        XCTAssertEqual(try mode(fresh), 0o700)
+        let old = base.appendingPathComponent("old")
+        try fm.createDirectory(at: old, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
+        _ = try IdentityStore(directory: old, defaultDeviceName: "x")
+        XCTAssertEqual(try mode(old), 0o700)
+    }
 }

@@ -41,7 +41,7 @@ private final class RecordingSink: DisplaySink {
 
 /// A raw Host: real handshake, then whatever messages the test wants to send.
 private final class RawHost {
-    let id = Identity(deviceId: UUID().uuidString, deviceName: "Raw Host", signingKey: Curve25519.Signing.PrivateKey())
+    let id: Identity
     let conn: NWConnection
     private let rx = Locked(Data())
     private var framer = ControlFramer()
@@ -50,7 +50,8 @@ private final class RawHost {
     var result: HandshakeResult!
     let closed = Locked(false)
 
-    init(port: UInt16) throws {
+    init(port: UInt16, identity: Identity? = nil) throws {
+        id = identity ?? Identity(deviceId: UUID().uuidString, deviceName: "Raw Host", signingKey: Curve25519.Signing.PrivateKey())
         conn = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: ControlChannel.tcpParameters())
         let ready = DispatchSemaphore(value: 0)
         conn.stateUpdateHandler = { [closed] s in
@@ -148,12 +149,14 @@ final class DisplayPrePairingTests: XCTestCase {
         return try IdentityStore(directory: d, defaultDeviceName: "Display")
     }
 
-    private func start(_ store: IdentityStore, _ sink: RecordingSink) throws -> UInt16 {
+    private func start(_ store: IdentityStore, _ sink: RecordingSink, limits: DisplayLimits = DisplayLimits(),
+                       clock: (() -> Double)? = nil) throws -> UInt16 {
         let caps = CapabilitiesMessage(role: "display", deviceName: "D", osVersion: "t", panelPixelWidth: 1280,
                                        panelPixelHeight: 720, panelWidthMM: 600, panelHeightMM: 340, backingScale: 2,
                                        edrHeadroom: 1, refreshHz: 60, hwDecodeH264: true, hwDecodeHEVC: true,
                                        hwEncodeH264: true, hwEncodeHEVC: true, wideColor: false)
-        let d = DisplaySession(identityStore: store, capabilities: caps, sink: sink)
+        let d = clock.map { DisplaySession(identityStore: store, capabilities: caps, sink: sink, limits: limits, clock: $0) }
+            ?? DisplaySession(identityStore: store, capabilities: caps, sink: sink, limits: limits)
         try d.start()
         sessions.append(d)
         let end = Date().addingTimeInterval(10)
@@ -297,5 +300,126 @@ final class DisplayPrePairingTests: XCTestCase {
         try h.send(.sessionRequest(SessionRequestMessage(format: bad, hiDPI: true, cursorMode: "\u{0}", audio: true, fecRatio: 1e300)))
         XCTAssertEqual(try h.receive(), .bye(ByeMessage(reason: "bad-format")))
         XCTAssertTrue(h.waitClosed())
+    }
+
+    // MARK: Connection abuse limits
+
+    func testIdleUnauthenticatedConnectionsAreDroppedAndDoNotBlockPairedHost() throws {
+        var lim = DisplayLimits(); lim.handshakeTimeoutS = 0.5
+        let st = try store()
+        let sink = RecordingSink()
+        let port = try start(st, sink, limits: lim)
+        let idle = try RawHost(port: port)          // never speaks
+        let a = try RawHost(port: port)
+        try st.addPeer(Peer(deviceId: a.id.deviceId, deviceName: "A", identityKey: a.id.publicKey, pairedAt: Date()))
+        try a.handshake(knownByHost: true)           // not blocked by the idle connection
+        if case .capabilities? = try a.receive() {} else { XCTFail("expected capabilities") }
+        XCTAssertTrue(idle.waitClosed(timeout: 2), "idle connection must be dropped after the handshake timeout")
+        // A is authenticated and keeps its slot; an unauthenticated idle peer does not bump it.
+        let idle2 = try RawHost(port: port)
+        XCTAssertTrue(idle2.waitClosed(timeout: 2))
+        XCTAssertFalse(a.closed.get())
+        // A second authenticated host is told busy.
+        let c = try RawHost(port: port)
+        try c.handshake()
+        XCTAssertEqual(try c.receive(), .bye(ByeMessage(reason: "busy")))
+        XCTAssertFalse(a.closed.get())
+    }
+
+    func testUnsecuredLinkCap() throws {
+        var lim = DisplayLimits(); lim.maxUnsecuredLinks = 2; lim.handshakeTimeoutS = 30
+        let port = try start(try store(), RecordingSink(), limits: lim)
+        let hosts = try (0..<5).map { _ in try RawHost(port: port) }
+        Thread.sleep(forTimeInterval: 0.5)
+        XCTAssertEqual(hosts.filter { $0.closed.get() }.count, 3, "connections beyond the cap are closed at once")
+    }
+
+    func testPerIPRateLimitBlocksAndRecoversWithClock() throws {
+        var lim = DisplayLimits(); lim.exemptLoopback = false; lim.rateMaxConnections = 3
+        lim.rateWindowS = 10; lim.rateBlockS = 30; lim.handshakeTimeoutS = 30
+        let now = Locked(100.0)
+        let port = try start(try store(), RecordingSink(), limits: lim, clock: { now.get() })
+        let first = try (0..<2).map { _ in try RawHost(port: port) }   // 2 allowed, 3rd trips the limit
+        let third = try RawHost(port: port)
+        XCTAssertTrue(third.waitClosed(timeout: 2))
+        XCTAssertFalse(first.contains { $0.closed.get() })
+        now.mutate { $0 += 20 }
+        let blocked = try RawHost(port: port)
+        XCTAssertTrue(blocked.waitClosed(timeout: 2), "still blocked 20 s later")
+        now.mutate { $0 += 20 }
+        let ok = try RawHost(port: port)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertFalse(ok.closed.get(), "allowed again after the block expired")
+    }
+
+    func testRateLimiterUnit() {
+        var t = 0.0
+        var l = ConnectionRateLimiter(maxConnections: 10, window: 10, blockFor: 30, clock: { t })
+        for _ in 0..<9 { XCTAssertTrue(l.allow("a")); t += 0.1 }
+        XCTAssertFalse(l.allow("a"))
+        XCTAssertTrue(l.allow("b"))
+        t += 29; XCTAssertFalse(l.allow("a"))
+        t += 2; XCTAssertTrue(l.allow("a"))
+    }
+
+    // MARK: Pairing dialog abuse
+
+    func testRepeatedPairingMessagesRaiseOneAllowDialog() throws {
+        let st = try store()
+        let sink = RecordingSink()
+        sink.hold.mutate { $0 = true }
+        let h = try RawHost(port: try start(st, sink))
+        try h.handshake()
+        try h.send(.pairRequest(PairRequestMessage()))
+        wait("code") { sink.codes.get().count == 1 }
+        try h.send(.pairConfirm(PairConfirmMessage()))
+        wait("dialog") { sink.asked.get() == 1 }
+        for _ in 0..<5 {
+            try h.send(.pairRequest(PairRequestMessage()))
+            try h.send(.pairConfirm(PairConfirmMessage()))
+        }
+        Thread.sleep(forTimeInterval: 0.4)
+        XCTAssertEqual(sink.asked.get(), 1)
+        XCTAssertEqual(sink.codes.get().count, 1)
+        XCTAssertFalse(h.closed.get())
+    }
+
+    func testDeniedKeyIsRefusedFor60sThenAllowed() throws {
+        let st = try store()
+        let sink = RecordingSink()
+        sink.answer.mutate { $0 = false }
+        let now = Locked(1000.0)
+        let port = try start(st, sink, clock: { now.get() })
+        let h = try RawHost(port: port)
+        try h.handshake()
+        try h.send(.pairRequest(PairRequestMessage()))
+        try h.send(.pairConfirm(PairConfirmMessage()))
+        XCTAssertEqual(try h.receive(), .pairResult(PairResultMessage(accepted: false)))
+        XCTAssertTrue(h.waitClosed())
+        XCTAssertEqual(sink.asked.get(), 1)
+
+        // Same identity key again: refused, no code, no dialog.
+        now.mutate { $0 += 30 }
+        let h2 = try RawHost(port: port, identity: h.id)
+        try h2.handshake()
+        try h2.send(.pairRequest(PairRequestMessage()))
+        XCTAssertEqual(try h2.receive(), .bye(ByeMessage(reason: "pairing-denied")))
+        XCTAssertEqual(sink.codes.get().count, 1)
+        XCTAssertEqual(sink.asked.get(), 1)
+
+        // A different key is unaffected.
+        let other = try RawHost(port: port)
+        try other.handshake()
+        try other.send(.pairRequest(PairRequestMessage()))
+        wait("other code") { sink.codes.get().count == 2 }
+        other.conn.cancel()
+        XCTAssertTrue(other.waitClosed())
+
+        // After the cooldown the key may try again.
+        now.mutate { $0 += 31 }
+        let h3 = try RawHost(port: port, identity: h.id)
+        try h3.handshake()
+        try h3.send(.pairRequest(PairRequestMessage()))
+        wait("code after cooldown") { sink.codes.get().count == 3 }
     }
 }
