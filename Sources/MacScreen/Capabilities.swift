@@ -15,10 +15,17 @@ enum LocalCapabilities {
                 if s.width > 0, s.height > 0 { mm = s }
             }
         }
+        // Test hook: a windowed (loopback) Display advertises this panel, e.g. `-msWindowedPanel 5120x2880`;
+        // `-msWindowedP3 YES` advertises a wide-colour panel.
+        if windowed && role == .display, let o = UserDefaults.standard.string(forKey: "msWindowedPanel") {
+            let p = o.split(separator: "x").compactMap { Int($0) }
+            if p.count == 2, p[0] > 0, p[1] > 0 { w = p[0]; h = p[1] }
+        }
         var wide = false
         if !windowed || role == .host, let cs = NSScreen.main?.colorSpace?.cgColorSpace {
             wide = cs.name == CGColorSpace.displayP3 || (cs.isWideGamutRGB && cs.name != CGColorSpace.sRGB)
         }
+        if windowed && role == .display && UserDefaults.standard.bool(forKey: "msWindowedP3") { wide = true }
         let hevcDec = CodecCapabilities.hardwareDecodeSupported(.hevc)
         let h264Dec = CodecCapabilities.hardwareDecodeSupported(.h264)
         return CapabilitiesMessage(

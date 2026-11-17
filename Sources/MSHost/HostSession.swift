@@ -141,6 +141,7 @@ public final class HostSession {
     private let streamLock = NSLock()
     private var lastBuffer: CVPixelBuffer?
     private var lastCaptureArrival: UInt64 = 0
+    private var lastEncodeOut: UInt64 = 0   // encode queue (under streamLock)
     private var lastSentFrameId: UInt32 = 0
     private var highestDecoded: UInt32 = 0
     private var lastProgress: UInt64 = 0
@@ -227,7 +228,7 @@ public final class HostSession {
     public func submitPairingCode(_ code: String) {
         queue.async { [self] in
             guard state == .awaitingPairingCode, let r = handshake, let ch = channel else { return }
-            guard code.trimmingCharacters(in: .whitespaces) == r.pairingCode else {
+            guard constantTimeEqual(code.trimmingCharacters(in: .whitespaces), r.pairingCode) else {
                 ch.send(.bye(ByeMessage(reason: "pairing-failed")))
                 finish(.pairingCodeMismatch)
                 return
@@ -512,7 +513,11 @@ public final class HostSession {
                           pct(0.5), pct(0.95), w.framesSent, w.bytes / 1024, w.maxFrameBytes / 1024, pkts,
                           Double(wire) * 8 / 2 / 1e6, w.nacks, w.retransmits, w.keyframeReqDisplay,
                           w.keyframeReqRecovery, Double(br) / 1e6, fec, div)
-        Self.statsLog.notice("\(line, privacy: .public)")
+        func p(_ a: [Double], _ q: Double) -> Double { let s = a.sorted(); return s.isEmpty ? 0 : s[min(s.count - 1, Int(q * Double(s.count)))] }
+        let extra = String(format: " capIv p50/p95=%.1f/%.1f outIv p50/p95=%.1f/%.1f inflightAvg=%.2f",
+                           p(w.capIvMs, 0.5), p(w.capIvMs, 0.95), p(w.outIvMs, 0.5), p(w.outIvMs, 0.95),
+                           w.encodeIn == 0 ? 0 : Double(w.inflightSum) / Double(w.encodeIn))
+        Self.statsLog.notice("\(line + extra, privacy: .public)")
     }
 
     /// Source thread.
@@ -521,7 +526,9 @@ public final class HostSession {
         streamLock.lock()
         guard streamActive else { streamLock.unlock(); return }
         lastBuffer = pb
-        lastCaptureArrival = MonoClock.nowMicros()
+        let arrival = MonoClock.nowMicros()
+        if lastCaptureArrival > 0 { st.capIvMs.append(Double(arrival &- lastCaptureArrival) / 1000) }
+        lastCaptureArrival = arrival
         st.captured += 1
         // Up to 2 frames in flight: at 4K the HW encoder's latency (22-37 ms measured) exceeds one
         // 16.7 ms frame interval while its throughput keeps up; `> 1` dropped 10-27 frames per 2 s.
@@ -537,6 +544,7 @@ public final class HostSession {
         }
         keyframePendingSince = nil
         st.encodeIn += 1
+        st.inflightSum += UInt64(enc.pendingFrames)
         encodeStart[captureTimeMicros] = lastCaptureArrival
         if encodeStart.count > 32 { encodeStart.removeAll(keepingCapacity: true) }
         streamLock.unlock()
@@ -555,6 +563,9 @@ public final class HostSession {
         let fec = currentFec
         let bitrateNow = currentBitrate
         st.encodeOut += 1
+        let outNow = MonoClock.nowMicros()
+        if lastEncodeOut > 0 { st.outIvMs.append(Double(outNow &- lastEncodeOut) / 1000) }
+        lastEncodeOut = outNow
         if f.isKeyframe { st.keyframesOut += 1 }
         if let t0 = encodeStart.removeValue(forKey: f.captureTimeMicros) {
             st.encodeMs.append(Double(MonoClock.nowMicros() &- t0) / 1000)
@@ -743,6 +754,9 @@ struct HostStatsWindow {
     var encodeOut: UInt64 = 0
     var keyframesOut: UInt64 = 0
     var encodeMs: [Double] = []
+    var capIvMs: [Double] = []
+    var outIvMs: [Double] = []
+    var inflightSum: UInt64 = 0
     var framesSent: UInt64 = 0
     var bytes: UInt64 = 0
     var maxFrameBytes: UInt64 = 0

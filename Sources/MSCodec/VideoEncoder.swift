@@ -141,13 +141,26 @@ public final class VideoEncoder {
         setProperty(s, kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: bitrate))
         setProperty(s, kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: format.fps))
         setProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, NSNumber(value: 36000))
+        // HEVC rejects this (-12900); harmless, frame reordering is off anyway.
         setProperty(s, kVTCompressionPropertyKey_MaxFrameDelayCount, NSNumber(value: 0))
         setProperty(s, kVTCompressionPropertyKey_ColorPrimaries, colour.vuiPrimaries)
         setProperty(s, kVTCompressionPropertyKey_TransferFunction, colour.vuiTransfer)
         setProperty(s, kVTCompressionPropertyKey_YCbCrMatrix, colour.vuiMatrix)
         if #available(macOS 13.0, *) {
+            // Essential at 4K: measured live without it 19.4 ms per frame service time (~51 fps max,
+            // 55 ms latency); with it the encoder keeps up with 60 fps at ~20 ms pipelined latency.
             setProperty(s, kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality, kCFBooleanTrue)
         }
+        var applied: [String] = []
+        for k in [kVTCompressionPropertyKey_RealTime, kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality,
+                  kVTCompressionPropertyKey_MaxFrameDelayCount, kVTCompressionPropertyKey_AverageBitRate,
+                  kVTCompressionPropertyKey_ExpectedFrameRate, kVTCompressionPropertyKey_ProfileLevel,
+                  kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder] {
+            var v: CFTypeRef?
+            let st = withUnsafeMutablePointer(to: &v) { VTSessionCopyProperty(s, key: k, allocator: nil, valueOut: $0) }
+            applied.append("\(k as String)=\(st == noErr ? String(describing: v!) : "err\(st)")")
+        }
+        Self.log.notice("encoder properties: \(applied.joined(separator: " "), privacy: .public)")
     }
 
     // MARK: API

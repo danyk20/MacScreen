@@ -196,7 +196,16 @@ public final class ScreenCapturer: NSObject {
             : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         sc.colorSpaceName = c.colour.captureColourSpaceName
         sc.colorMatrix = CGDisplayStream.yCbCrMatrix_ITU_R_709_2
-        sc.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(1, c.fps)))
+        // A minimum interval of exactly 1/fps loses frames whose vsync timestamps jitter a little under
+        // 16.7 ms: measured 56 fps (capture interval p50 17.4 ms) on a 60 Hz virtual display. 90 % of the
+        // interval still caps at the refresh rate (or every 2nd vsync for 30 fps on 60 Hz) and gave a
+        // steady 60 fps (p50 16.7 ms). Test override: `-msCapFps N` (0 = no limit).
+        let d = UserDefaults.standard
+        let capFps = d.object(forKey: "msCapFps") != nil ? d.integer(forKey: "msCapFps") : 0
+        let fps = max(1, c.fps)
+        sc.minimumFrameInterval = d.object(forKey: "msCapFps") == nil
+            ? CMTime(value: 9, timescale: CMTimeScale(fps * 10))
+            : (capFps <= 0 ? .zero : CMTime(value: 1, timescale: CMTimeScale(capFps)))
         sc.queueDepth = 3
         sc.showsCursor = c.showsCursor
         sc.scalesToFit = true   // same 16:9 aspect; capture size = encode size <= display pixel size
@@ -228,7 +237,12 @@ extension ScreenCapturer: SCStreamOutput {
                 lock.withLock { _counters.framesOther &+= 1 }
                 return
             }
-            lock.withLock { _counters.framesDelivered &+= 1 }
+            let first: Bool = lock.withLock { _counters.framesDelivered &+= 1; return _counters.framesDelivered == 1 }
+            if first {
+                let atts = CVBufferCopyAttachments(pb, .shouldPropagate) as? [String: Any] ?? [:]
+                let desc = "fmt=\(CVPixelBufferGetPixelFormatType(pb)) \(CVPixelBufferGetWidth(pb))x\(CVPixelBufferGetHeight(pb)) bpr=\(CVPixelBufferGetBytesPerRowOfPlane(pb, 0)) iosurf=\(CVPixelBufferGetIOSurface(pb) != nil) atts=\(atts.filter { !$0.key.contains("ICC") })"
+                log.notice("first capture buffer: \(desc, privacy: .public)")
+            }
             var age = 0.0
             let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             if pts.isValid {
