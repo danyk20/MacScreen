@@ -87,7 +87,8 @@ iMac state: app in ~/Applications/MacScreen.app (user osx, ssh alias iMac5K), no
   two 'could not connect' retries) - keep the iMac screen awake (caffeinate -u -t 2 over ssh before connecting).
 - Cursor overlay mode (--cursor overlay) verified by user: cursor, shapes, leaving the display all fine.
 - Mirror toggle verified by user (on/off both fine) after the VPN on the iMac was turned off (link check 54 Mbit/s -> 4K60).
-- Still not verified live: sleep/wake, settings window, setup-test UI, login item, audio, tearing
+- Sleep/wake verified (2026-11-17 20:47): Host ended session on sleep, auto-reconnected after wake without pairing, re-ran link check, streaming 4K60 again.
+- Still not verified live: settings window, setup-test UI, login item, audio, tearing
   (user did not report tearing; vsync stays off), G3/G4/G5, Fable review of P1.
 
 ### iMac VPN problem (found 2026-11-17 20:4x)
