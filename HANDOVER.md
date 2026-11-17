@@ -97,6 +97,14 @@ dropped replies to new TCP connections (listener queue full of SYN_RCVD; ssh por
 timed out). Not a MacScreen bug. Fix on the iMac (user): quit/disconnect CyberGhost or disable its on-demand, or
 exclude local networks. Check before connecting: `ssh iMac5K 'scutil --nc list'`.
 
+### Audio driver (Gate G4, in progress)
+First install loaded but the device never appeared: Driver-Service log said 'dlsym cannot find symbol MacScreenAudio_Create'
+(-fvisibility=hidden hid the factory). Fixed with visibility("default"); AudioDriver/tests/driver_harness.c (74 selectors x 6
+objects + IO loopback) runs on every build. User must reinstall: `Scripts/install-audio-driver.sh` (sudo), then
+`system_profiler SPAudioDataType | grep -A3 'MacScreen Display'`. Remaining risk: macOS 27 may reject the ad-hoc signature in the
+Driver-Service helper (log: `log show --last 2m --predicate 'process == "coreaudiod" OR process CONTAINS "Driver"'`); then sign with
+'MacScreen Dev' or Developer ID.
+
 ### Pending decision gates (Fable only, one question per call)
 G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
 G4 driver load result on macOS 27; G5 HDR spike.
