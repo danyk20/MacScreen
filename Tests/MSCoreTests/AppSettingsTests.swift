@@ -9,7 +9,7 @@ final class AppSettingsTests: XCTestCase {
     func testDefaults() {
         let s = AppSettings.load(from: freshDefaults())
         XCTAssertEqual(s, AppSettings())
-        XCTAssertEqual(s.fps, 60); XCTAssertEqual(s.codec, "hevc"); XCTAssertEqual(s.maxHeight, 0)
+        XCTAssertEqual(s.fps, 60); XCTAssertEqual(s.codec, "hevc"); XCTAssertEqual(s.maxHeight, 2160)
         XCTAssertFalse(s.hdr); XCTAssertEqual(s.cursorMode, "embedded")
     }
 

@@ -3,8 +3,9 @@ import Foundation
 /// User settings (PLAN.md section 7). Codable, stored as one JSON blob in UserDefaults.
 /// Host-side fields are preferences only: the Host clamps them to what the Display advertises.
 public struct AppSettings: Codable, Equatable {
-    /// Maximum video height in pixels; 0 = the Display's native panel size.
-    public var maxHeight: Int = 0
+    /// Maximum video height in pixels; 0 = the Display's native panel size (5K: manual choice only).
+    /// Default 2160 (Gate G1: HEVC 3840x2160 @ 60 fps).
+    public var maxHeight: Int = 2160
     /// Preferred frame rate (30 or 60).
     public var fps: Int = 60
     /// "hevc" or "h264".

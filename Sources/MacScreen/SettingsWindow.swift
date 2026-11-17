@@ -20,7 +20,7 @@ private struct SettingsView: View {
     let role: Role
 
     private func heightLabel(_ h: Int) -> String {
-        h == 0 ? "Display native" : (h == 2160 ? "2160p (4K)" : "\(h)p")
+        h == 0 ? "Display native (5K, static work)" : (h == 2160 ? "2160p (4K)" : "\(h)p")
     }
 
     var body: some View {

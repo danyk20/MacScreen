@@ -96,19 +96,36 @@ final class ProfileRecommenderTests: XCTestCase {
         let b = cand(.hevc, 1920, 1080)   // 7.5 Mbit/s
         let outcomes = [CandidateOutcome(candidate: a, encode: enc(a, p95: 5), decode: dec(a)),
                         CandidateOutcome(candidate: b, encode: enc(b, p95: 5), decode: dec(b))]
-        // 40 Mbit/s usable -> budget 24 Mbit/s: a is rejected.
-        var r = ProfileRecommender.recommend(outcomes: outcomes, link: link([(10, 0), (20, 0), (40, 0), (80, 0.05)]),
+        // 20 Mbit/s usable -> budget 12 Mbit/s: a's bitrate at 0.04 bpp (19.9) does not fit, b's (5.0) does.
+        var r = ProfileRecommender.recommend(outcomes: outcomes, link: link([(10, 0), (20, 0), (40, 0.05)]),
                                              interface: .wired)
-        XCTAssertEqual(r.throughputBps, 40_000_000)
+        XCTAssertEqual(r.throughputBps, 20_000_000)
         XCTAssertEqual(r.candidate, b)
         XCTAssertTrue(r.rejections[0].reason.contains("link budget"))
-        // 0.6 share at exactly the boundary: 50 Mbit/s -> 30 Mbit/s budget admits a (29.86).
+        XCTAssertEqual(r.bitrate, b.bitrate)    // min(profile 7.46, 12) = profile
+        // 40 Mbit/s usable -> budget 24 admits a (min 19.9); start bitrate = min(29.86, 24) = 24 Mbit/s.
+        r = ProfileRecommender.recommend(outcomes: outcomes, link: link([(10, 0), (20, 0), (40, 0), (80, 0.05)]),
+                                         interface: .wired)
+        XCTAssertEqual(r.candidate, a)
+        XCTAssertEqual(r.bitrate, 24_000_000)
+        // Exact boundary of the minimum: 33.2 Mbit/s * 0.6 = 19.9 admits a, just below does not.
         r = ProfileRecommender.recommend(outcomes: outcomes, link: link([(10, 0), (50, 0)]), interface: .wired)
         XCTAssertEqual(r.candidate, a)
+        XCTAssertEqual(r.bitrate, a.bitrate)   // 0.6 * 50 = 30 > profile 29.86
         // Nothing usable: everything rejected.
         r = ProfileRecommender.recommend(outcomes: outcomes, link: link([(10, 0.5)]), interface: .wired)
         XCTAssertNil(r.candidate)
         XCTAssertEqual(r.rejections.count, 2)
+    }
+
+    func testManualOnlyNeverChosen() {
+        var a = cand(.hevc, 5120, 2880, fps: 30)
+        a.manualOnly = true
+        let r = ProfileRecommender.recommend(
+            outcomes: [CandidateOutcome(candidate: a, encode: enc(a, p95: 5), decode: dec(a))],
+            link: link(fast), interface: .wired)
+        XCTAssertNil(r.candidate)
+        XCTAssertEqual(r.rejections[0].reason, "manual selection only")
     }
 
     func testSkipAndMissingSteps() {

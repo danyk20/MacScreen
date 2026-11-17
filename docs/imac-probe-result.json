@@ -1,0 +1,369 @@
+{
+  "caps" : {
+    "codec" : {
+      "arch" : "x86_64",
+      "cpu" : "Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz",
+      "encoders" : [
+        {
+          "codecName" : "H.264",
+          "encoderID" : "com.apple.videotoolbox.videoencoder.h264.gva",
+          "isHardware" : true
+        },
+        {
+          "codecName" : "H.264",
+          "encoderID" : "com.apple.videotoolbox.videoencoder.h264",
+          "isHardware" : false
+        },
+        {
+          "codecName" : "HEVC",
+          "encoderID" : "com.apple.videotoolbox.videoencoder.hevc.gva",
+          "isHardware" : true
+        },
+        {
+          "codecName" : "HEVC",
+          "encoderID" : "com.apple.videotoolbox.videoencoder.hevc.vcp",
+          "isHardware" : false
+        }
+      ],
+      "hwDecodeH264" : true,
+      "hwDecodeHEVC" : true,
+      "osVersion" : "12.7.6"
+    },
+    "display" : {
+      "backingScale" : 2,
+      "colorSpaceName" : "iMac",
+      "edrHeadroom" : 1.875,
+      "heightMM" : 340.24185535519626,
+      "pixelHeight" : 2880,
+      "pixelWidth" : 5120,
+      "refreshHz" : 0,
+      "widthMM" : 599.2995301699309
+    },
+    "probeVersion" : 1
+  },
+  "results" : [
+    {
+      "decode" : {
+        "bitrate" : 53084160,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 2,
+          "fps" : 60,
+          "height" : 2880,
+          "width" : 5120
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 7.8600000000000003,
+        "meanMs" : 7.443500000000002,
+        "outputHeight" : 2880,
+        "outputWidth" : 5120,
+        "p95Ms" : 7.6859999999999999,
+        "passed" : true,
+        "throughputFps" : 141.44160426210701,
+        "warmupExcluded" : 10
+      },
+      "file" : "00_hevc_5120x2880_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 29859840,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 2,
+          "fps" : 60,
+          "height" : 2160,
+          "width" : 3840
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 5.0209999999999999,
+        "meanMs" : 4.5023,
+        "outputHeight" : 2160,
+        "outputWidth" : 3840,
+        "p95Ms" : 4.6600000000000001,
+        "passed" : true,
+        "throughputFps" : 248.91583325958049,
+        "warmupExcluded" : 10
+      },
+      "file" : "01_hevc_3840x2160_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 44789760,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 1,
+          "fps" : 60,
+          "height" : 2160,
+          "width" : 3840
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 4.7750000000000004,
+        "meanMs" : 4.4877625000000023,
+        "outputHeight" : 2160,
+        "outputWidth" : 3840,
+        "p95Ms" : 4.6130000000000004,
+        "passed" : true,
+        "throughputFps" : 252.63937974225172,
+        "warmupExcluded" : 10
+      },
+      "file" : "02_h264_3840x2160_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 20736000,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 2,
+          "fps" : 60,
+          "height" : 1800,
+          "width" : 3200
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 3.8780000000000001,
+        "meanMs" : 3.3838124999999999,
+        "outputHeight" : 1800,
+        "outputWidth" : 3200,
+        "p95Ms" : 3.512,
+        "passed" : true,
+        "throughputFps" : 353.97533971799965,
+        "warmupExcluded" : 10
+      },
+      "file" : "03_hevc_3200x1800_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 31104000,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 1,
+          "fps" : 60,
+          "height" : 1800,
+          "width" : 3200
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 50.551000000000002,
+        "meanMs" : 4.3840374999999998,
+        "outputHeight" : 1800,
+        "outputWidth" : 3200,
+        "p95Ms" : 7.4740000000000002,
+        "passed" : true,
+        "throughputFps" : 357.36266354305229,
+        "warmupExcluded" : 10
+      },
+      "file" : "04_h264_3200x1800_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 13271040,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 2,
+          "fps" : 60,
+          "height" : 1440,
+          "width" : 2560
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 2.5779999999999998,
+        "meanMs" : 2.2117749999999994,
+        "outputHeight" : 1440,
+        "outputWidth" : 2560,
+        "p95Ms" : 2.3420000000000001,
+        "passed" : true,
+        "throughputFps" : 553.28435742169484,
+        "warmupExcluded" : 10
+      },
+      "file" : "05_hevc_2560x1440_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 19906560,
+        "failureReason" : "decoder is not hardware accelerated",
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 1,
+          "fps" : 60,
+          "height" : 1440,
+          "width" : 2560
+        },
+        "frames" : 90,
+        "hardware" : false,
+        "maxMs" : 10.132999999999999,
+        "meanMs" : 5.8876625000000029,
+        "outputHeight" : 1440,
+        "outputWidth" : 2560,
+        "p95Ms" : 9.0419999999999998,
+        "passed" : false,
+        "throughputFps" : 400.04622756407406,
+        "warmupExcluded" : 10
+      },
+      "file" : "06_h264_2560x1440_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 26542080,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 2,
+          "fps" : 30,
+          "height" : 2880,
+          "width" : 5120
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 7.673,
+        "meanMs" : 7.4357874999999991,
+        "outputHeight" : 2880,
+        "outputWidth" : 5120,
+        "p95Ms" : 7.5990000000000002,
+        "passed" : true,
+        "throughputFps" : 141.34719582868721,
+        "warmupExcluded" : 10
+      },
+      "file" : "07_hevc_5120x2880_30.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 14929920,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 2,
+          "fps" : 30,
+          "height" : 2160,
+          "width" : 3840
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 4.7709999999999999,
+        "meanMs" : 4.3085749999999994,
+        "outputHeight" : 2160,
+        "outputWidth" : 3840,
+        "p95Ms" : 4.5339999999999998,
+        "passed" : true,
+        "throughputFps" : 250.15565240594148,
+        "warmupExcluded" : 10
+      },
+      "file" : "08_hevc_3840x2160_30.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 22394880,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 1,
+          "fps" : 30,
+          "height" : 2160,
+          "width" : 3840
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 5.8010000000000002,
+        "meanMs" : 4.533687500000001,
+        "outputHeight" : 2160,
+        "outputWidth" : 3840,
+        "p95Ms" : 4.6509999999999998,
+        "passed" : true,
+        "throughputFps" : 254.02990214203658,
+        "warmupExcluded" : 10
+      },
+      "file" : "09_h264_3840x2160_30.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 10368000,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 2,
+          "fps" : 30,
+          "height" : 1800,
+          "width" : 3200
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 3.6379999999999999,
+        "meanMs" : 3.4008750000000001,
+        "outputHeight" : 1800,
+        "outputWidth" : 3200,
+        "p95Ms" : 3.5470000000000002,
+        "passed" : true,
+        "throughputFps" : 347.86910845012716,
+        "warmupExcluded" : 10
+      },
+      "file" : "10_hevc_3200x1800_30.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 15552000,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 1,
+          "fps" : 30,
+          "height" : 1800,
+          "width" : 3200
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 3.806,
+        "meanMs" : 3.4103500000000011,
+        "outputHeight" : 1800,
+        "outputWidth" : 3200,
+        "p95Ms" : 3.5750000000000002,
+        "passed" : true,
+        "throughputFps" : 354.95117449399737,
+        "warmupExcluded" : 10
+      },
+      "file" : "11_h264_3200x1800_30.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 6635520,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 2,
+          "fps" : 30,
+          "height" : 1440,
+          "width" : 2560
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 2.5459999999999998,
+        "meanMs" : 2.2188499999999993,
+        "outputHeight" : 1440,
+        "outputWidth" : 2560,
+        "p95Ms" : 2.3610000000000002,
+        "passed" : true,
+        "throughputFps" : 527.36744033423372,
+        "warmupExcluded" : 10
+      },
+      "file" : "12_hevc_2560x1440_30.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 9953280,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 1,
+          "fps" : 30,
+          "height" : 1440,
+          "width" : 2560
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 33.630000000000003,
+        "meanMs" : 2.8204499999999988,
+        "outputHeight" : 1440,
+        "outputWidth" : 2560,
+        "p95Ms" : 2.6600000000000001,
+        "passed" : true,
+        "throughputFps" : 521.02630603927378,
+        "warmupExcluded" : 10
+      },
+      "file" : "13_h264_2560x1440_30.msv"
+    }
+  ]
+}

@@ -30,8 +30,11 @@ public final class DisplayCaptureSource: CursorAwareSource {
                       onFrame: @escaping (CVPixelBuffer, UInt64) -> Void) async throws {
         let colour = ColourPlan(panelIsP3: display.wideColor)
         let serial = VirtualDisplay.serial(forDeviceId: peer.deviceId)  // stable per Display: macOS restores arrangement
+        // The virtual display is always the Display's panel size with HiDPI (PLAN 6.2); ScreenCaptureKit scales the
+        // capture to the encode size (`format`).
         let cfg = VirtualDisplayConfig(
-            name: peer.deviceName, pixelWidth: format.width, pixelHeight: format.height, hiDPI: hiDPI,
+            name: peer.deviceName, pixelWidth: display.panelPixelWidth, pixelHeight: display.panelPixelHeight,
+            hiDPI: hiDPI && display.backingScale > 1,
             refreshRate: 60, sizeMM: CGSize(width: display.panelWidthMM, height: display.panelHeightMM),
             serial: serial, colour: colour)
         let boxedCfg = Box(value: cfg)

@@ -61,7 +61,8 @@ public struct HostSessionConfig {
         let h264OK = c.hwDecodeH264 && c.hwEncodeH264
         var codec: Codec = settings.codec == "h264" ? .h264 : .hevc
         if codec == .hevc && !hevcOK { codec = .h264 } else if codec == .h264 && !h264OK && hevcOK { codec = .hevc }
-        // Resolution: panel size, optionally reduced to maxHeight keeping aspect; even dimensions.
+        // Resolution: the panel size reduced to maxHeight keeping aspect; even dimensions. maxHeight 0 = the
+        // panel size itself (e.g. 5K, manual choice only); the default is 2160 (G1 decision).
         var w = max(2, c.panelPixelWidth), h = max(2, c.panelPixelHeight)
         if settings.maxHeight > 0 && settings.maxHeight < h {
             w = Int((Double(w) * Double(settings.maxHeight) / Double(h)).rounded())
@@ -80,8 +81,7 @@ public struct HostSessionConfig {
     }
 
     public static func defaultFormat(_ c: CapabilitiesMessage) -> VideoFormat {
-        VideoFormat(codec: c.hwDecodeHEVC ? .hevc : .h264, width: c.panelPixelWidth,
-                    height: c.panelPixelHeight, fps: 60, bitDepth: 8)
+        format(for: c, settings: AppSettings())
     }
 }
 

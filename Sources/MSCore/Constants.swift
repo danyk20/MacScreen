@@ -29,6 +29,9 @@ public enum MSConstants {
     public static let audioTargetBufferMs = 25
     public static let bitsPerPixelHEVC = 0.06
     public static let bitsPerPixelH264 = 0.09
+    /// Floor used by the setup test: a candidate only qualifies if its bitrate at this density fits the link.
+    public static let minBitsPerPixelHEVC = 0.04
+    public static let minBitsPerPixelH264 = 0.06
     public static let minBitrate = 3_000_000
     public static let linkBudgetShare = 0.6
     public static let vendorID: UInt32 = 0x4D53

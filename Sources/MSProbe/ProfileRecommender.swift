@@ -93,10 +93,17 @@ public enum ProfileRecommender {
         }
         return Recommendation(
             candidate: chosen,
-            bitrate: chosen.map { Swift.max(MSConstants.minBitrate, $0.bitrate) } ?? 0,
+            bitrate: chosen.map { startBitrate($0, throughputBps: throughput, hasLink: link != nil) } ?? 0,
             fecRatio: fecRatio(interface: interface, link: link),
             throughputBps: throughput,
             rejections: rejections)
+    }
+
+    /// start bitrate = min(profile bitrate, 0.6 x throughput) (PLAN 6.10 step 4), never below `minBitrate`.
+    static func startBitrate(_ c: Candidate, throughputBps: Int, hasLink: Bool) -> Int {
+        var b = c.bitrate
+        if hasLink { b = Swift.min(b, Int(MSConstants.linkBudgetShare * Double(throughputBps))) }
+        return Swift.max(MSConstants.minBitrate, b)
     }
 
     /// FEC default: wired and lossless gets the wired default; anything else the Wi-Fi default,
@@ -114,14 +121,15 @@ public enum ProfileRecommender {
         let f = o.candidate.format
         let interval = 1000.0 / Double(Swift.max(f.fps, 1))
         if let s = o.skipReason { return s }
+        if o.candidate.manualOnly { return "manual selection only" }
         if f.codec == .h264 && (f.width > 4096 || f.height > 2304) {
             return "H.264 is not supported above 4096x2304"
         }
         if let link {
             let budget = MSConstants.linkBudgetShare * Double(link.usableThroughputBps)
-            if Double(o.candidate.bitrate) > budget {
-                return String(format: "bitrate %.1f Mbit/s exceeds link budget %.1f Mbit/s",
-                              Double(o.candidate.bitrate) / 1e6, budget / 1e6)
+            if Double(o.candidate.minBitrate) > budget {
+                return String(format: "minimum bitrate %.1f Mbit/s exceeds link budget %.1f Mbit/s",
+                              Double(o.candidate.minBitrate) / 1e6, budget / 1e6)
             }
         }
         guard let enc = o.encode else { return "encode benchmark not run" }

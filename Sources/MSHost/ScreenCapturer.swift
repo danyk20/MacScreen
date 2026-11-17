@@ -199,7 +199,7 @@ public final class ScreenCapturer: NSObject {
         sc.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(1, c.fps)))
         sc.queueDepth = 3
         sc.showsCursor = c.showsCursor
-        sc.scalesToFit = false
+        sc.scalesToFit = true   // same 16:9 aspect; capture size = encode size <= display pixel size
         if #available(macOS 13.0, *) { sc.capturesAudio = false }
         return sc
     }

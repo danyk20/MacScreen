@@ -159,6 +159,7 @@ every rebuild. A stable identity keeps the permission across rebuilds.
 | `audioSampleRate` / channels / frames per packet | 48000 / 2 / 240 (5 ms, s16le) |
 | `audioTargetBufferMs` | 25 |
 | `bitsPerPixelHEVC` / `bitsPerPixelH264` | 0.06 / 0.09 (per pixel per frame) |
+| `minBitsPerPixelHEVC` / `minBitsPerPixelH264` | 0.04 / 0.06 (link-fit check in 6.10 step 4) |
 | `minBitrate` | 3 000 000 bit/s |
 | `linkBudgetShare` | 0.6 of measured throughput |
 | `vendorID` / `productID` | 0x4D53 / 0x0001 |
@@ -207,8 +208,8 @@ final class VirtualDisplay {                       // main thread only
   func destroy()
 }
 ```
-- `maxPixelsWide/High` = pixel size. HiDPI: `hiDPI = 1`, mode = (pixel/2, 60 Hz).
-  Non-HiDPI: `hiDPI = 0`, mode = (pixel, 60 Hz).
+- `maxPixelsWide/High` = pixel size. Always `hiDPI = 1`, pixel size = Display panel size,
+  mode = (pixel/2, 60 Hz); non-HiDPI only for panels with `backingScale` 1.
 - `serial` = first 4 bytes of SHA-256 of the Display's `deviceId`, so macOS remembers
   arrangement per Display. `sizeMM` comes from the Display's `capabilities`.
 - sRGB primaries in v1 (R .64,.33  G .30,.60  B .15,.06  W .3127,.3290); P3 in M6.
@@ -217,10 +218,10 @@ final class VirtualDisplay {                       // main thread only
 `SCStream` with `SCContentFilter(display:excludingWindows: [])`. Find the `SCDisplay`
 whose `displayID` matches; retry `SCShareableContent.current` every 200 ms for up to 3 s
 after display creation. Configuration:
-`width/height` = pixel size · `pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange`
+`width/height` = `VideoFormat` size (≤ display pixel size) · `pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange`
 · `colorSpaceName = CGColorSpace.sRGB` · `colorMatrix = CGDisplayStream.yCbCrMatrix_ITU_R_709_2`
 · `minimumFrameInterval = CMTime(1, fps)` · `queueDepth = 3` · `showsCursor = false`
-(true in "embedded cursor" mode) · `scalesToFit = false`.
+(true in "embedded cursor" mode) · `scalesToFit = true` (same 16:9 aspect).
 In the output callback: read `SCStreamFrameInfo.status`; forward only `.complete` frames.
 Idle screens produce no frames; that is intended. If the encoder still has a frame in
 flight (`pendingFrames > 1`), drop the new frame and count it.
@@ -383,9 +384,10 @@ Underrun → silence until refilled to target. Fill > target + 15 ms → drop 5 
 2 ms crossfade. Missing packet → silence for that packet.
 
 ### 6.10 Auto-configuration (`MSProbe`)
-Candidates are generated from the Display's panel pixel size `P`: scales
-{1.0, 0.75, 0.625, 0.5} × codecs {HEVC, H.264} × 60 fps, ordered best first; 30 fps
-variants are appended last. HiDPI is used when the scaled size is ≥ 0.75 × P.
+Candidates are generated from the Display's panel pixel size `P`: encode scales {1.0, 0.75, 0.625, 0.5} × P.
+Order: all HEVC 60 fps, then HEVC 30 fps at scales ≤ 0.75, then H.264 60 fps, then H.264 30 fps; HEVC 1.0 × P at 30 fps is
+generated but manual-only (5K60 is not generated: beyond the M2 encoder). The virtual display is always P pixels with
+HiDPI (P/2 points); the candidate's size is the capture/encode size only.
 Profile bitrate = width × height × fps × bitsPerPixel(codec).
 1. Host: `EncodeBench` encodes 90 frames of `TestPattern` (scrolling text plus moving
    gradient, deterministic) per candidate (first 10 frames excluded as warm-up); pass if p95 encode time < 0.85 × frame
@@ -395,8 +397,9 @@ Profile bitrate = width × height × fps × bitsPerPixel(codec).
    ≥ 1.5 × fps.
 3. `LinkProbe`: UDP trains of 0.5 s at 10, 20, 40, 80, 160 Mbit/s; usable throughput =
    highest rate with loss < 1 %.
-4. `ProfileRecommender` picks the first candidate passing 1 and 2 whose bitrate ≤
-   0.6 × throughput, and returns the reasons for every rejected candidate.
+4. `ProfileRecommender` picks the first candidate passing 1 and 2 whose bitrate at
+   `minBitsPerPixel` ≤ 0.6 × throughput; start bitrate = min(profile bitrate, 0.6 × throughput). Manual-only
+   candidates are never picked. It returns the reasons for every rejected candidate.
 5. HDR is offered only if: Display reports EDR headroom > 1, 10-bit sample decodes in
    hardware, Host encodes Main10, and Gate G5 enabled HDR virtual displays.
 Results are cached per (Display id, interface type). Re-run from Settings or when the
@@ -552,6 +555,13 @@ Format: **ID — title** · files · what to build · acceptance. All tasks also
 | G3 | latency CSV on Wi-Fi and wired | pacing, jitter wait, FEC defaults; optional sharpness and LTR work |
 | G4 | driver load result | signing approach for the audio driver, or fallback design |
 | G5 | HDR spike | ship, mark experimental, or drop HDR |
+
+**G1 decision (2026-11-17).** Default = HEVC 8-bit 3840x2160 @ 60 fps, start bitrate 30 Mbit/s (0.06 bpp), FEC 0.0 wired /
+0.10 Wi-Fi, encoded from a virtual display that is always the Display panel size with HiDPI (5120x2880, 2560x1440 pt),
+ScreenCaptureKit scaling to the encode size. Fallback ladder (all HEVC, same virtual display, only the capture scale
+changes): 3840x2160@60, 3200x1800@60, 2560x1440@60, 3840x2160@30, 3200x1800@30, 2560x1440@30; H.264 last resort only
+(3840x2160@60, then 3200x1800@60). 5K at 30 fps is manual-only ("5K 30 (static work)"); 5K60 is not reachable (M2 encoder).
+Facts: iMac hardware decode p95 HEVC 5K60 7.69 ms, 4K60 4.66 ms; H.264 2560x1440@60 is not hardware-decoded.
 
 ## 10. Verification
 
