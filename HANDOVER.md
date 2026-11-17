@@ -89,6 +89,12 @@ iMac state: app in ~/Applications/MacScreen.app (user osx, ssh alias iMac5K), no
 - Still not verified live: sleep/wake, mirror toggle, settings window, setup-test UI, login item, audio, tearing
   (user did not report tearing; vsync stays off), G3/G4/G5, Fable review of P1.
 
+### iMac VPN problem (found 2026-11-17 20:4x)
+Host could not connect: a CyberGhost IKEv2 VPN on the iMac (connect-on-demand) was stuck in 'connecting' and silently
+dropped replies to new TCP connections (listener queue full of SYN_RCVD; ssh port 22 still worked; MacScreen port
+timed out). Not a MacScreen bug. Fix on the iMac (user): quit/disconnect CyberGhost or disable its on-demand, or
+exclude local networks. Check before connecting: `ssh iMac5K 'scutil --nc list'`.
+
 ### Pending decision gates (Fable only, one question per call)
 G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
 G4 driver load result on macOS 27; G5 HDR spike.
