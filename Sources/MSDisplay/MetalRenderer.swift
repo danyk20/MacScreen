@@ -23,6 +23,29 @@ public struct RendererCounters {
     public init() {}
 }
 
+/// Present-path tuning (Display). Overridable via launch arguments or
+/// `defaults write app.macscreen.MacScreen msRenderVsync -bool YES` (also `msRenderDrawables`, `msRenderStreamSize`).
+/// Measured on the iMac 5K (HEVC 4K60, Wi-Fi): vsync off cuts decode->present p50 from ~34 ms to ~7 ms
+/// (capture->present p50 76 -> 53 ms); 3 drawables and a stream-sized drawable gave no gain.
+public struct PresentOptions: Equatable {
+    /// `CAMetalLayer.displaySyncEnabled`. Off by default (lowest latency; may tear); `msRenderVsync YES` restores it.
+    public var vsync: Bool = false
+    /// `CAMetalLayer.maximumDrawableCount` (2 or 3).
+    public var drawables: Int = 2
+    /// Size the drawable to the decoded frame (e.g. 3840x2160) and let Core Animation scale to the panel.
+    public var streamSizedDrawable: Bool = false
+    public init() {}
+
+    public static func fromDefaults(_ d: UserDefaults = .standard) -> PresentOptions {
+        var o = PresentOptions()
+        if d.object(forKey: "msRenderVsync") != nil { o.vsync = d.bool(forKey: "msRenderVsync") }
+        let n = d.integer(forKey: "msRenderDrawables")
+        if n == 2 || n == 3 { o.drawables = n }
+        o.streamSizedDrawable = d.bool(forKey: "msRenderStreamSize")
+        return o
+    }
+}
+
 public final class MetalRenderer {
     private struct Frame {
         let buffer: CVPixelBuffer
@@ -45,6 +68,7 @@ public final class MetalRenderer {
     private var stats = RendererCounters()
     private var pipelines: [MTLPixelFormat: MTLRenderPipelineState] = [:]
     private var layer: CAMetalLayer?
+    private var options = PresentOptions()
 
     public init(device: MTLDevice? = nil) throws {
         guard let dev = device ?? MTLCreateSystemDefaultDevice() else { throw RendererError.noDevice }
@@ -79,22 +103,25 @@ public final class MetalRenderer {
 
     // MARK: Layer
 
-    public func attach(layer: CAMetalLayer, drawableSize: CGSize, tenBit: Bool = false, colour: ColourPlan = .srgb) {
+    public func attach(layer: CAMetalLayer, drawableSize: CGSize, tenBit: Bool = false, colour: ColourPlan = .srgb,
+                       options: PresentOptions = PresentOptions()) {
         layer.device = device
         layer.pixelFormat = tenBit ? .bgr10a2Unorm : .bgra8Unorm
         layer.colorspace = CGColorSpace(name: colour.layerColourSpaceName)
-        layer.displaySyncEnabled = true
-        layer.maximumDrawableCount = 2
+        layer.displaySyncEnabled = options.vsync
+        layer.maximumDrawableCount = options.drawables
         layer.framebufferOnly = true
         layer.isOpaque = true
         layer.allowsNextDrawableTimeout = true
         layer.presentsWithTransaction = false
         layer.drawableSize = drawableSize
-        withLock { self.layer = layer }
+        withLock { self.layer = layer; self.options = options }
+        log.info("present options vsync=\(options.vsync) drawables=\(options.drawables) streamSized=\(options.streamSizedDrawable)")
     }
 
     public func updateDrawableSize(_ size: CGSize) {
-        let l = withLock { layer }
+        let (l, o) = withLock { (layer, options) }
+        if o.streamSizedDrawable { return }
         l?.drawableSize = size
     }
 
@@ -115,28 +142,39 @@ public final class MetalRenderer {
         queue.async { [weak self] in self?.drain() }
     }
 
-    private func takeFrame() -> (Frame, CAMetalLayer?)? {
+    private func takeFrame() -> Frame? {
         withLock {
             guard let f = mailbox else { return nil }
             mailbox = nil
-            return (f, layer)
+            return f
+        }
+    }
+
+    private func pendingLayer() -> (CAMetalLayer?, Bool, CGSize?)? {
+        withLock {
+            guard let f = mailbox else { return nil }
+            let size = options.streamSizedDrawable
+                ? CGSize(width: CVPixelBufferGetWidth(f.buffer), height: CVPixelBufferGetHeight(f.buffer)) : nil
+            return (layer, true, size)
         }
     }
 
     private func addFailure() { withLock { stats.drawFailures += 1 } }
 
-    /// Runs on the render queue: draws until the mailbox is empty.
+    /// Runs on the render queue: draws until the mailbox is empty. The drawable is acquired *before* the
+    /// frame is taken: `nextDrawable()` can block up to a vsync when all drawables are in flight, and frames
+    /// decoded meanwhile replace the mailbox, so the newest frame is drawn rather than a stale one.
     private func drain() {
-        while let (frame, layer) = takeFrame() {
-            draw(frame, layer: layer)
+        while let (layer, _, streamSize) = pendingLayer() {
+            guard let layer = layer else { _ = takeFrame(); addFailure(); continue }
+            if let s = streamSize, layer.drawableSize != s { layer.drawableSize = s }
+            guard let drawable = layer.nextDrawable() else { _ = takeFrame(); addFailure(); continue }
+            guard let frame = takeFrame() else { return }
+            draw(frame, drawable: drawable)
         }
     }
 
-    private func draw(_ frame: Frame, layer: CAMetalLayer?) {
-        guard let layer = layer, let drawable = layer.nextDrawable() else {
-            addFailure()
-            return
-        }
+    private func draw(_ frame: Frame, drawable: CAMetalDrawable) {
         guard let cb = commandQueue.makeCommandBuffer() else { addFailure(); return }
         Signpost.begin("render", id: frame.captureMicros)
         let keep: [CVMetalTexture]

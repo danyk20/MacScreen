@@ -46,6 +46,16 @@ T7.1 (docs), T7.2 (cleanup, Scripts/test.sh, Scripts/deploy-display.sh). 0 build
 Loopback on this Mac confirmed live by the user (virtual display, --windowed, fast).
 Not done: T6.2/T6.3 (HDR, Gate G5), anything needing the iMac.
 
+### First live session on the iMac (2026-11-17)
+Paired and streaming over Wi-Fi (HEVC 4K60 default, G1 applied). Gateway 192.168.43.1 (hotspot-like,
+slow router, 86 ms avg ping to iMac); iMac Ethernet not connected. Baseline capture->present p50 83 /
+p95 147 ms; render stage 34.7 ms. Tuning: vsync OFF by default on Display cut render to ~7 ms and
+capture->present p50 to ~53-57 ms (p95 ~125-140, mostly Wi-Fi jitter). USER MUST CHECK FOR TEARING;
+restore with `defaults write app.macscreen.MacScreen msRenderVsync -bool YES` (or -msRenderVsync YES).
+Other settings: msRenderDrawables (2), msRenderStreamSize (off). Next: wired/5GHz link, G3 with
+wired CSV, tearing check (G2 decision). Bug fixed: Allow alert hidden behind full-screen Display window.
+iMac state: app in ~/Applications/MacScreen.app (user osx, ssh alias iMac5K), not running.
+
 ### Pending decision gates (Fable only, one question per call)
 G1 needs iMac `msprobe` JSON; G2 first live iMac session; G3 latency CSV on Wi-Fi + wired;
 G4 driver load result on macOS 27; G5 HDR spike.

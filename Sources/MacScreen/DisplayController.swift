@@ -58,7 +58,7 @@ final class DisplayController {
         window = DisplayWindow(windowed: windowed)
         renderer = try MetalRenderer()
         renderer.attach(layer: window.metalLayer, drawableSize: window.drawablePixelSize,
-                        colour: ColourPlan(panelIsP3: caps.wideColor))
+                        colour: ColourPlan(panelIsP3: caps.wideColor), options: PresentOptions.fromDefaults())
         window.onResize = { [renderer] size in renderer.updateDrawableSize(size) }
         let rs = RendererSink(renderer: renderer, window: window)
         rs.onAskAllow = { [window] host, done in
