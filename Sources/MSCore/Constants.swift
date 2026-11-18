@@ -4,6 +4,9 @@ import Foundation
 public enum MSConstants {
     public static let protoVersion: UInt8 = 1
     public static let bonjourType = "_macscreen._tcp"
+    /// Preferred TCP port of the Display control listener, so a Host can connect by IP address.
+    /// If it is taken the Display falls back to a random port (shown by "Show Address").
+    public static let defaultControlPort: UInt16 = 47_800
     public static let fragmentSize = 1200
     public static let maxDataFragsPerBlock = 64
     public static let maxParityFragsPerBlock = 32

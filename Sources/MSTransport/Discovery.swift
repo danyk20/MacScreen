@@ -22,6 +22,7 @@ public final class DisplayAdvertiser {
     private let deviceId: String
     private let deviceName: String
     private let queue: DispatchQueue
+    private let preferredPort: UInt16?
     private var listener: NWListener?
     private let portLock = NSLock()
     private var portValue: UInt16?
@@ -29,10 +30,12 @@ public final class DisplayAdvertiser {
     public var onConnection: ((NWConnection) -> Void)?
     public var onStateChange: ((Bool) -> Void)?
 
-    public init(deviceId: String, deviceName: String, queue: DispatchQueue) {
+    /// `preferredPort`: tried first; if it is in use the listener restarts on a random port.
+    public init(deviceId: String, deviceName: String, queue: DispatchQueue, preferredPort: UInt16? = nil) {
         self.deviceId = deviceId
         self.deviceName = deviceName
         self.queue = queue
+        self.preferredPort = preferredPort
     }
 
     public var port: UInt16? {
@@ -46,19 +49,35 @@ public final class DisplayAdvertiser {
 
     public func start() throws {
         guard listener == nil else { return }
-        let l = try NWListener(using: ControlChannel.tcpParameters(), on: .any)
+        try launch(port: preferredPort.flatMap { NWEndpoint.Port(rawValue: $0) })
+    }
+
+    private func launch(port: NWEndpoint.Port?) throws {
+        let l = try NWListener(using: ControlChannel.tcpParameters(), on: port ?? .any)
         var txt = NWTXTRecord()
         txt["id"] = deviceId
         txt["name"] = deviceName
         txt["v"] = String(MSConstants.protoVersion)
         l.service = NWListener.Service(name: deviceName, type: MSConstants.bonjourType, txtRecord: txt)
         l.stateUpdateHandler = { [weak self, weak l] state in
-            guard let self = self else { return }
+            guard let self = self, let l = l, l === self.listener else { return }
             switch state {
             case .ready:
-                self.setPort(l?.port?.rawValue)
+                self.setPort(l.port?.rawValue)
                 self.onStateChange?(true)
             case .failed(let e):
+                if port != nil {
+                    // The preferred port is taken (for example a second instance): use a random one.
+                    Self.log.notice("port \(port!.rawValue) unavailable (\(String(describing: e))), using a random port")
+                    l.cancel()
+                    self.listener = nil
+                    do { try self.launch(port: nil) } catch {
+                        Self.log.error("listener failed: \(String(describing: error))")
+                        self.setPort(nil)
+                        self.onStateChange?(false)
+                    }
+                    return
+                }
                 Self.log.error("listener failed: \(String(describing: e))")
                 self.setPort(nil)
                 self.onStateChange?(false)

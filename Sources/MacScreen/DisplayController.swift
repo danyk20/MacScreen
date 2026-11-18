@@ -4,6 +4,7 @@ import MSCore
 import MSCodec
 import MSDisplay
 import MSProtocol
+import MSTransport
 
 /// Display side sink: delegates to `RendererSink` and remembers the pairing code for "Show pairing code".
 final class AppSink: DisplaySink {
@@ -76,7 +77,8 @@ final class DisplayController {
         sink.onConnected = { DispatchQueue.main.async { p.hostConnected() } }
         sink.onDisconnected = { DispatchQueue.main.async { p.hostDisconnected() } }
         sink.onHostState = { s in DispatchQueue.main.async { p.hostStateChanged(displayAsleep: s.displayAsleep) } }
-        session = DisplaySession(identityStore: store, capabilities: caps, sink: sink)
+        session = DisplaySession(identityStore: store, capabilities: caps, sink: sink,
+                                 preferredPort: MSConstants.defaultControlPort)
         let rec = session.latency
         renderer.onPresented = { capture, at in rec.presented(captureMicros: capture, atMicros: at) }
         try session.start()
@@ -113,6 +115,24 @@ final class DisplayController {
         let i = NSMenuItem(title: "Show Pairing Code", action: #selector(showCode), keyEquivalent: "")
         i.target = self
         menu.addItem(i)
+        let a = NSMenuItem(title: "Show Address\u{2026}", action: #selector(showAddress), keyEquivalent: "")
+        a.target = self
+        menu.addItem(a)
+    }
+
+    @objc private func showAddress() {
+        let port = session.port ?? MSConstants.defaultControlPort
+        let entries = LocalAddresses.ipv4()
+        let lines = entries.isEmpty
+            ? "This Mac has no network address right now."
+            : entries.map { e in
+                let shown = port == MSConstants.defaultControlPort ? e.address : "\(e.address):\(port)"
+                return "\(shown)  (\(e.interface == "en0" ? "Wi-Fi or Ethernet" : e.interface))"
+            }.joined(separator: "\n")
+        window.runningDialog {
+            _ = Dialogs.alert("Address of this Display",
+                              "On the Host choose Connect to Address\u{2026} and enter:\n\n\(lines)")
+        }
     }
 
     /// Items for the Debugging submenu.

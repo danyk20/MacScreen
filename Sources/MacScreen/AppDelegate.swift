@@ -1,5 +1,6 @@
 import AppKit
 import MSHost
+import MSProtocol
 import os
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -75,6 +76,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         outputGuard.restoreIfStranded()
     }
 
+    /// The identity store of the running role: renames go through it so the in-memory copy and the file agree.
+    private var currentStore: IdentityStore?
+
+    /// Settings "This Mac": empty input restores the Mac's own name. A Display re-advertises under the new name;
+    /// a Host with a live session keeps its connection and uses the new name from the next connection.
+    private func renameDevice(_ input: String) {
+        guard let store = currentStore, let role = role else { return }
+        let fallback = LocalIdentity.defaultName(windowed: options.windowed, role: role)
+        let name = DeviceName.sanitize(input) ?? fallback
+        do { try store.setDeviceName(name) } catch {
+            _ = Dialogs.alert("Could not rename", String(describing: error))
+            return
+        }
+        settingsModel.deviceName = name
+        log.info("Device renamed")
+        if role == .display || !settingsModel.hostLive { startRole() }
+        rebuildMenu()
+    }
+
     private func startRole() {
         host?.stop(); host = nil
         display?.stop(); display = nil
@@ -83,6 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let role = role else { return }
         do {
             let store = try LocalIdentity.open(role: role, windowed: options.windowed)
+            currentStore = store
+            settingsModel.deviceName = store.identity.deviceName
+            settingsModel.onRename = { [weak self] name in self?.renameDevice(name) }
             let caps = LocalCapabilities.make(role: role, windowed: options.windowed, deviceName: store.identity.deviceName)
             switch role {
             case .host:

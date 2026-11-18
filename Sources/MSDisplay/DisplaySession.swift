@@ -41,6 +41,7 @@ public final class DisplaySession {
     /// Links that have not been secured yet (control queue).
     private var pendingLinks: [ObjectIdentifier: Link] = [:]
     fileprivate let limits: DisplayLimits
+    private let preferredPort: UInt16?
     fileprivate let clock: () -> Double
     private var rateLimiter: ConnectionRateLimiter
     /// Identity key -> time of the last denied pairing (control queue).
@@ -48,12 +49,13 @@ public final class DisplaySession {
 
     /// `clock` returns monotonic seconds; injectable for tests.
     public init(identityStore: IdentityStore, capabilities: CapabilitiesMessage, sink: DisplaySink,
-                limits: DisplayLimits = DisplayLimits(),
+                limits: DisplayLimits = DisplayLimits(), preferredPort: UInt16? = nil,
                 clock: @escaping () -> Double = { Double(DispatchTime.now().uptimeNanoseconds) / 1e9 }) {
         self.store = identityStore
         self.capabilities = capabilities
         self.sink = sink
         self.limits = limits
+        self.preferredPort = preferredPort
         self.clock = clock
         self.rateLimiter = ConnectionRateLimiter(maxConnections: limits.rateMaxConnections,
                                                  window: limits.rateWindowS, blockFor: limits.rateBlockS, clock: clock)
@@ -64,7 +66,8 @@ public final class DisplaySession {
 
     public func start() throws {
         let id = store.identity
-        let adv = DisplayAdvertiser(deviceId: id.deviceId, deviceName: id.deviceName, queue: queue)
+        let adv = DisplayAdvertiser(deviceId: id.deviceId, deviceName: id.deviceName, queue: queue,
+                                    preferredPort: preferredPort)
         adv.onConnection = { [weak self] conn in self?.handleConnection(conn) }
         advertiser = adv
         try adv.start()

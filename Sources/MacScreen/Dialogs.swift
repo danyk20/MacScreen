@@ -12,16 +12,18 @@ enum Dialogs {
     }
 
     /// Returns the typed text, or nil when cancelled.
-    static func prompt(_ title: String, _ info: String, placeholder: String) -> String? {
+    static func prompt(_ title: String, _ info: String, placeholder: String, okTitle: String = "Pair",
+                       initial: String = "", width: CGFloat = 200, fontSize: CGFloat = 20) -> String? {
         NSApp.activate(ignoringOtherApps: true)
         let a = NSAlert()
         a.messageText = title
         a.informativeText = info
-        a.addButton(withTitle: "Pair")
+        a.addButton(withTitle: okTitle)
         a.addButton(withTitle: "Cancel")
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 28))
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: width, height: 28))
         field.placeholderString = placeholder
-        field.font = NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .regular)
+        field.stringValue = initial
+        field.font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .regular)
         a.accessoryView = field
         a.window.initialFirstResponder = field
         return a.runModal() == .alertFirstButtonReturn ? field.stringValue : nil

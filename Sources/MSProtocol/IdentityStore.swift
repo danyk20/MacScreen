@@ -27,6 +27,20 @@ private struct IdentityFile: Codable {
     var peers: [Peer]
 }
 
+/// User-chosen device names: printable, single line, at most 40 characters (a Bonjour name is limited to 63 bytes).
+public enum DeviceName {
+    public static let maxLength = 40
+
+    /// nil when nothing usable is left (the caller then falls back to the Mac's own name).
+    public static func sanitize(_ raw: String) -> String? {
+        let bad = CharacterSet.controlCharacters.union(.newlines).union(.illegalCharacters)
+        let cleaned = String(String.UnicodeScalarView(raw.unicodeScalars.filter { !bad.contains($0) }))
+            .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        guard !cleaned.isEmpty else { return nil }
+        return String(cleaned.prefix(maxLength)).trimmingCharacters(in: .whitespaces)
+    }
+}
+
 public final class IdentityStore {
     private let lock = NSLock()
     private let fileURL: URL
@@ -98,6 +112,15 @@ public final class IdentityStore {
         let old = file
         file.peers.removeAll { $0.identityKey == p.identityKey }
         file.peers.append(p)
+        do { try save() } catch { file = old; throw error }
+    }
+
+    /// Renames this device (shown to other Macs and in pairing dialogs). The caller passes a sanitized name.
+    public func setDeviceName(_ name: String) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard name != file.deviceName else { return }
+        let old = file
+        file.deviceName = name
         do { try save() } catch { file = old; throw error }
     }
 

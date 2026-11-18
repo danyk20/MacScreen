@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import MSCore
+import MSProtocol
 
 /// Observable wrapper around `AppSettings`; saves on every change. Main thread only.
 final class SettingsModel: ObservableObject {
@@ -15,6 +16,9 @@ final class SettingsModel: ObservableObject {
     @Published var hostLive = false
     /// Set by the app to the Host controller's reconnect action; nil when not in the Host role.
     var onReconnect: (() -> Void)?
+    /// This device's current name, and the action that renames it (set by the app). Empty = the Mac's own name.
+    @Published var deviceName = ""
+    var onRename: ((String) -> Void)?
 
     init() { settings = AppSettings.load() }
 }
@@ -22,6 +26,7 @@ final class SettingsModel: ObservableObject {
 private struct SettingsView: View {
     @ObservedObject var model: SettingsModel
     let role: Role
+    @State private var nameDraft = ""
 
     private func heightLabel(_ h: Int) -> String {
         h == 0 ? "Display native (5K, static work)" : (h == 2160 ? "2160p (4K)" : "\(h)p")
@@ -72,6 +77,19 @@ private struct SettingsView: View {
                         .font(.caption).foregroundColor(.secondary)
                 }
             }
+            Section(header: Text("This Mac").font(.headline)) {
+                HStack {
+                    TextField("Name", text: $nameDraft)
+                        .onSubmit { model.onRename?(nameDraft) }
+                    Button("Rename") { model.onRename?(nameDraft) }
+                        .disabled(DeviceName.sanitize(nameDraft) == model.deviceName)
+                }
+                Text(role == .display
+                     ? "How this Display appears in the Host's list. Leave empty to use the Mac's own name."
+                     : "How this Host appears in pairing dialogs on the Display. Leave empty to use the Mac's own name.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+            .onAppear { nameDraft = model.deviceName }
             Section(header: Text("General").font(.headline)) {
                 Toggle("Show stats overlay", isOn: $model.settings.statsOverlay)
                 Toggle("Launch at login", isOn: $model.settings.launchAtLogin)

@@ -240,6 +240,16 @@ final class HostController: NSObject {
             item.isEnabled = connected || (session == nil && probeSession == nil && linkCheck == nil)
             menu.addItem(item)
         }
+        // A session started by address is not in the discovered list; keep its Disconnect item reachable.
+        if let c = connectedTo, session != nil, !displays.contains(c) {
+            let item = NSMenuItem(title: "Disconnect from \(c.name)", action: #selector(disconnect), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
+        let byAddress = NSMenuItem(title: "Connect to Address\u{2026}", action: #selector(connectToAddress), keyEquivalent: "")
+        byAddress.target = self
+        byAddress.isEnabled = session == nil && probeSession == nil && linkCheck == nil
+        menu.addItem(byAddress)
         if isSessionActive {
             let reconnectItem = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "")
             reconnectItem.target = self
@@ -305,6 +315,27 @@ final class HostController: NSObject {
         do { try audioSwitcher.enable() } catch {
             sessionHasAudio = false
             Log.logger("audio").error("output switch failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Fallback when Bonjour discovery is blocked (guest Wi-Fi, VPN, other subnet): connect to "address[:port]".
+    @objc private func connectToAddress() {
+        let key = "msLastAddress"
+        let last = UserDefaults.standard.string(forKey: key) ?? ""
+        let info = "Enter the Display's IP address or name, for example 192.168.1.20. "
+            + "On the Display Mac choose Show Address in the MacScreen menu."
+        var message = info
+        while true {
+            guard let text = Dialogs.prompt("Connect to Address", message, placeholder: "192.168.1.20",
+                                            okTitle: "Connect", initial: last, width: 280, fontSize: 15) else { return }
+            if let a = ManualAddress.parse(text) {
+                UserDefaults.standard.set(a.display, forKey: key)
+                let d = DiscoveredDisplay(id: a.key, name: a.display, endpoint: a.endpoint)
+                policy.userConnect(id: d.id)
+                connect(to: d)
+                return
+            }
+            message = "\u{201C}\(text)\u{201D} is not a valid address. " + info
         }
     }
 

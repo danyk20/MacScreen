@@ -11,8 +11,13 @@ enum LocalIdentity {
         } else if windowed {
             dir = dir.appendingPathComponent("windowed-\(role.rawValue)", isDirectory: true)
         }
+        return try IdentityStore(directory: dir, defaultDeviceName: defaultName(windowed: windowed, role: role))
+    }
+
+    /// The Mac's own name (what a device is called until the user renames it).
+    static func defaultName(windowed: Bool, role: Role) -> String {
         var name = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
         if windowed { name += " (\(role.rawValue))" }
-        return try IdentityStore(directory: dir, defaultDeviceName: name)
+        return name
     }
 }
