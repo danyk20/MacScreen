@@ -140,4 +140,4 @@ jobs:
           N
           FLAGS=(--generate-notes --title "MacScreen ${TAG}")
           [[ "$PRERELEASE" == "true" ]] && FLAGS+=(--prerelease)
-          gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt "${FLAGS[@]}" --notes-file notes-header.md
+          gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt "${FLAGS[@]}" --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file notes-header.md
