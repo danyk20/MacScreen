@@ -80,6 +80,20 @@ The only unknown is the iMac Main10 decode speed (see 2).
   p95 < 0.6 × frame interval in hardware, expose 10-bit SDR as an opt-in (≤ 4K, HEVC only, ~9 % encoder cost). If it
   is software decode, drop 10-bit too.
 
+## iMac Main10 decode check (2026-11-18)
+
+Result: `docs/imac-10bit-result.json` (iMac i5-6500, macOS 12.7.6, over a slow Wi-Fi; decode is local so unaffected).
+
+| Sample | Hardware | p95 ms | Unpaced fps |
+|---|---|---|---|
+| HEVC 8-bit 3840x2160 | yes | 4.74 | 251 |
+| HEVC 10-bit 3840x2160 | no | 7.71 | 149 |
+| HEVC 10-bit 3200x1800 | no | 5.76 | 195 |
+| HEVC 10-bit 2560x1440 | no | 3.79 | 314 |
+
+Main10 decodes in software at every size. The pass rule needs hardware, and software decode would compete with the
+renderer for the same four cores. **Decision: 10-bit dropped for v1, T6.3 not built.** The dormant switches stay unused.
+
 ## Commands
 
 ```

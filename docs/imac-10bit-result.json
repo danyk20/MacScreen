@@ -1,0 +1,141 @@
+{
+  "caps" : {
+    "codec" : {
+      "arch" : "x86_64",
+      "cpu" : "Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz",
+      "encoders" : [
+        {
+          "codecName" : "H.264",
+          "encoderID" : "com.apple.videotoolbox.videoencoder.h264.gva",
+          "isHardware" : true
+        },
+        {
+          "codecName" : "H.264",
+          "encoderID" : "com.apple.videotoolbox.videoencoder.h264",
+          "isHardware" : false
+        },
+        {
+          "codecName" : "HEVC",
+          "encoderID" : "com.apple.videotoolbox.videoencoder.hevc.gva",
+          "isHardware" : true
+        },
+        {
+          "codecName" : "HEVC",
+          "encoderID" : "com.apple.videotoolbox.videoencoder.hevc.vcp",
+          "isHardware" : false
+        }
+      ],
+      "hwDecodeH264" : true,
+      "hwDecodeHEVC" : true,
+      "osVersion" : "12.7.6"
+    },
+    "display" : {
+      "backingScale" : 2,
+      "colorSpaceName" : "iMac",
+      "edrHeadroom" : 1.875,
+      "heightMM" : 340.24185535519626,
+      "pixelHeight" : 2880,
+      "pixelWidth" : 5120,
+      "refreshHz" : 0,
+      "widthMM" : 599.2995301699309
+    },
+    "probeVersion" : 1
+  },
+  "results" : [
+    {
+      "decode" : {
+        "bitrate" : 29859840,
+        "format" : {
+          "bitDepth" : 8,
+          "codec" : 2,
+          "fps" : 60,
+          "height" : 2160,
+          "width" : 3840
+        },
+        "frames" : 90,
+        "hardware" : true,
+        "maxMs" : 5.0650000000000004,
+        "meanMs" : 4.5642624999999999,
+        "outputHeight" : 2160,
+        "outputWidth" : 3840,
+        "p95Ms" : 4.7380000000000004,
+        "passed" : true,
+        "throughputFps" : 251.09785562431296,
+        "warmupExcluded" : 10
+      },
+      "file" : "hevc08_3840x2160_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 13271040,
+        "failureReason" : "decoder is not hardware accelerated",
+        "format" : {
+          "bitDepth" : 10,
+          "codec" : 2,
+          "fps" : 60,
+          "height" : 1440,
+          "width" : 2560
+        },
+        "frames" : 90,
+        "hardware" : false,
+        "maxMs" : 4.2400000000000002,
+        "meanMs" : 3.0417749999999995,
+        "outputHeight" : 1440,
+        "outputWidth" : 2560,
+        "p95Ms" : 3.7909999999999999,
+        "passed" : false,
+        "throughputFps" : 313.6336549820706,
+        "warmupExcluded" : 10
+      },
+      "file" : "hevc10_2560x1440_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 20736000,
+        "failureReason" : "decoder is not hardware accelerated",
+        "format" : {
+          "bitDepth" : 10,
+          "codec" : 2,
+          "fps" : 60,
+          "height" : 1800,
+          "width" : 3200
+        },
+        "frames" : 90,
+        "hardware" : false,
+        "maxMs" : 6.8419999999999996,
+        "meanMs" : 4.6141499999999986,
+        "outputHeight" : 1800,
+        "outputWidth" : 3200,
+        "p95Ms" : 5.7610000000000001,
+        "passed" : false,
+        "throughputFps" : 195.35828709853871,
+        "warmupExcluded" : 10
+      },
+      "file" : "hevc10_3200x1800_60.msv"
+    },
+    {
+      "decode" : {
+        "bitrate" : 29859840,
+        "failureReason" : "decoder is not hardware accelerated",
+        "format" : {
+          "bitDepth" : 10,
+          "codec" : 2,
+          "fps" : 60,
+          "height" : 2160,
+          "width" : 3840
+        },
+        "frames" : 90,
+        "hardware" : false,
+        "maxMs" : 8.3260000000000005,
+        "meanMs" : 6.2479250000000004,
+        "outputHeight" : 2160,
+        "outputWidth" : 3840,
+        "p95Ms" : 7.7089999999999996,
+        "passed" : false,
+        "throughputFps" : 148.79722245184757,
+        "warmupExcluded" : 10
+      },
+      "file" : "hevc10_3840x2160_60.msv"
+    }
+  ]
+}

@@ -404,7 +404,7 @@ Profile bitrate = width × height × fps × bitsPerPixel(codec).
 5. HDR is not offered in v1 (Gate G5, Provisional decision P3). 10-bit SDR (HEVC Main10, ≤ 3840x2160, opt-in, never
    picked automatically) is offered only if: the Display decodes a Main10 sample of that candidate in hardware with
    p95 < 0.6 × frame interval and unpaced throughput ≥ 1.5 × fps (same rule as step 2), and the Host encodes it in
-   hardware with p95 < 0.85 × frame interval. Until the P3 iMac check passes, 10-bit is not offered at all.
+   hardware with p95 < 0.85 × frame interval. The P3 iMac check FAILED (2026-11-18, software decode), so 10-bit is not offered in v1.
 Results are cached per (Display id, interface type). Re-run from Settings or when the
 interface type changes.
 
@@ -545,7 +545,7 @@ Format: **ID — title** · files · what to build · acceptance. All tasks also
   *Status: DONE 2026-11-18 (Opus, Fable out of credits); report `docs/hdr-spike.md`, scripts `Scripts/spikes/`.
   G5 decided provisionally (P3, section 9): HDR dropped for v1; 10-bit SDR conditional on an iMac decode check.*
 - **T6.3 — 10-bit SDR pipeline (no HDR)** only if the P3 iMac Main10 decode check passes.
-  *Status: BLOCKED on that check (iMac unreachable 2026-11-18); nothing built. If it passes, T6.3 = (a) capture:
+  *Status: DROPPED 2026-11-18: the iMac Main10 decode check failed (software decode at every size, see docs/hdr-spike.md); nothing built. If it passes, T6.3 = (a) capture:
   `ScreenCapturer` `tenBit` → SCK `x420` (10-bit 4:2:0 video range) from the normal tf=0 virtual display;
   (b) encode: `VideoEncoder` bitDepth 10 → `kVTProfileLevel_HEVC_Main10_AutoLevel`, HEVC only, ≤ 3840x2160, same
   bitrate rule and VUI as 8-bit (sRGB / Display P3 per T6.1, no PQ); (c) negotiation: existing `VideoFormat.bitDepth`

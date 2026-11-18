@@ -44,7 +44,7 @@ Committed and pushed to private repo danyk20/MacScreen (HTTPS remote): M0, M1, M
 M3 T3.1-T3.6, M4 T4.1-T4.4, M5 T5.1-T5.3 (driver written+compiled, NOT installed), T6.1 (P3),
 T7.1 (docs), T7.2 (cleanup, Scripts/test.sh, Scripts/deploy-display.sh). 0 build warnings.
 Loopback on this Mac confirmed live by the user (virtual display, --windowed, fast).
-Not done: T6.3 (10-bit SDR, blocked on the iMac Main10 decode check, see Provisional decision P3), anything needing the iMac.
+T6.3 (10-bit SDR) DROPPED: iMac Main10 decode check failed (software decode). Nothing else planned is open except live checks.
 
 ### First live session on the iMac (2026-11-17)
 Paired and streaming over Wi-Fi (HEVC 4K60 default, G1 applied). Gateway 192.168.43.1 (hotspot-like,
@@ -146,9 +146,9 @@ G4 driver load result on macOS 27; G5 HDR spike (decided provisionally as P3 202
   use `--connect` as a workaround.
 - HDR: dropped for v1 (G5 decided provisionally, P3 in PLAN.md, Opus, needs Fable review). A virtual display CAN be
   HDR (private transferFunction=1 initialiser, EDR 5.0; docs/hdr-spike.md) but the iMac panel (headroom 1.875) gains
-  little. 10-bit SDR waits on the check below.
+  little. 10-bit SDR dropped too (iMac decodes Main10 in software).
 
-### iMac 10-bit decode check (G5/P3, pending - run when the iMac is reachable)
+### iMac 10-bit decode check (G5/P3, DONE 2026-11-18: FAILED, 10-bit dropped; result in docs/imac-10bit-result.json)
 Host, repo root (build/msprobe must be universal and current; `Scripts/make-app.sh` rebuilds it):
 ```
 mkdir -p build/imac-10bit
