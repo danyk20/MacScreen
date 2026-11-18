@@ -86,11 +86,14 @@ jobs:
           cp Scripts/install-audio-driver.sh Scripts/uninstall-audio-driver.sh stage/audio/Scripts/
           (cd stage && zip -qry "../dist/MacScreen-AudioDriver-${TAG}.zip" audio)
           zip -qj "dist/msprobe-${TAG}-macOS.zip" build/msprobe
+          Scripts/make-dmg.sh "dist/MacScreen-${TAG}.dmg"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.dmg
           retention-days: 7
           if-no-files-found: error
 
@@ -112,12 +115,14 @@ jobs:
           path: dist
 
       - name: Checksums
-        run: cd dist && sha256sum ./*.zip | tee SHA256SUMS.txt
+        run: cd dist && sha256sum ./*.zip ./*.dmg | tee SHA256SUMS.txt
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: dist/*.zip
+          subject-path: |
+            dist/*.zip
+            dist/*.dmg
 
       - name: Create release
         env:
@@ -127,11 +132,15 @@ jobs:
         run: |
           cat > notes-header.md <<'N'
           ## Install
-          1. Download `MacScreen-*-macOS.zip`, unzip, move `MacScreen.app` to `/Applications` (or `~/Applications`).
-          2. The app is **not notarized**: right-click it, choose **Open** the first time
-             (or run `xattr -dr com.apple.quarantine MacScreen.app`).
-          3. Run it on both Macs and pair them with the code shown on the Display Mac.
-          4. Optional (experimental): `MacScreen-AudioDriver-*.zip` adds the sound-on-Display driver; run
+          **Homebrew (one command):**
+          ```
+          brew tap danyk20/macscreen https://github.com/danyk20/MacScreen
+          brew install --cask macscreen
+          ```
+          **Or download:** open `MacScreen-*.dmg` and drag MacScreen to Applications. The app is **not notarized**,
+          so the first time right-click it and choose **Open** (or run `xattr -dr com.apple.quarantine /Applications/MacScreen.app`).
+
+          Then run it on both Macs and pair them with the code shown on the Display Mac. Optional (experimental): `MacScreen-AudioDriver-*.zip` adds the sound-on-Display driver; run
              `audio/Scripts/install-audio-driver.sh`.
 
           Verify downloads with `SHA256SUMS.txt` or `gh attestation verify <file> --repo ${{ github.repository }}`.
@@ -140,4 +149,25 @@ jobs:
           N
           FLAGS=(--generate-notes --title "MacScreen ${TAG}")
           [[ "$PRERELEASE" == "true" ]] && FLAGS+=(--prerelease)
-          gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt "${FLAGS[@]}" --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file notes-header.md
+          gh release create "$TAG" dist/*.dmg dist/*.zip dist/SHA256SUMS.txt "${FLAGS[@]}" --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file notes-header.md
+
+      # Keep the Homebrew cask in step with the release (the cask lives in this repository's Casks/ folder).
+      - name: Check out main for the cask
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: tap
+
+      - name: Update Homebrew cask
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          SHA="$(sha256sum "dist/MacScreen-v${VERSION}.dmg" | cut -d' ' -f1)"
+          cd tap
+          Scripts/render-cask.sh "$VERSION" "$SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/macscreen.rb
+          if git diff --cached --quiet; then echo "Cask already up to date"; exit 0; fi
+          git commit -m "Cask: macscreen ${VERSION}"
+          git push origin HEAD:main

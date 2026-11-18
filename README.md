@@ -10,6 +10,19 @@ Goal: a display that feels cabled. Wi-Fi first, Thunderbolt or Ethernet second.
 **Status:** early development, version 0.1.0. Not notarized. Not yet verified end to end on the
 intended Display hardware. See [Known limits](docs/USAGE.md#known-limits).
 
+## Install
+
+**Homebrew** (installs the app and opens it without a Gatekeeper warning):
+
+```
+brew tap danyk20/macscreen https://github.com/danyk20/MacScreen
+brew install --cask macscreen
+```
+
+**Or download** the `.dmg` from the [latest release](https://github.com/danyk20/MacScreen/releases/latest), open it and
+drag MacScreen to Applications. The app is not notarized by Apple, so the first time right-click it and choose
+**Open**. Do this on both Macs, then see [docs/USAGE.md](docs/USAGE.md) for pairing.
+
 ## Requirements
 
 - **Host:** macOS 12.3 or later (`PLAN.md` §11). Built and tested only on
