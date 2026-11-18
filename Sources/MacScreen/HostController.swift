@@ -214,19 +214,23 @@ final class HostController: NSObject {
 
     // MARK: Menu
 
+    /// Everyday items only: status, connect/disconnect, and the two toggles people flip often.
+    /// Everything else lives in the Testing and Debugging submenus (see `testingItems`).
     func addMenuItems(to menu: NSMenu) {
-        let status = NSMenuItem(title: "Status: \(statusText)", action: nil, keyEquivalent: "")
+        let status = NSMenuItem(title: statusText, action: nil, keyEquivalent: "")
         status.isEnabled = false
         menu.addItem(status)
         if !ScreenCapturePermission.isGranted {
-            let i = NSMenuItem(title: "Screen Recording permission missing\u{2026}", action: #selector(showPermission), keyEquivalent: "")
+            let i = NSMenuItem(title: "Allow Screen Recording\u{2026}", action: #selector(showPermission), keyEquivalent: "")
             i.target = self
             menu.addItem(i)
         }
         menu.addItem(.separator())
-        let header = NSMenuItem(title: displays.isEmpty ? "No Displays found" : "Displays", action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        menu.addItem(header)
+        if displays.isEmpty {
+            let none = NSMenuItem(title: "No Displays found", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            menu.addItem(none)
+        }
         for d in displays {
             let connected = connectedTo == d && session != nil
             let item = NSMenuItem(title: connected ? "Disconnect from \(d.name)" : "Connect to \(d.name)",
@@ -236,40 +240,39 @@ final class HostController: NSObject {
             item.isEnabled = connected || (session == nil && probeSession == nil && linkCheck == nil)
             menu.addItem(item)
         }
-        let reconnectItem = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "")
-        reconnectItem.target = self
-        reconnectItem.isEnabled = isSessionActive && !reconnectRequested
-        menu.addItem(reconnectItem)
-        let setup = NSMenuItem(title: "Run setup test", action: nil, keyEquivalent: "")
-        let idle = session == nil && probeSession == nil
-        if displays.count == 1 {
-            setup.title = "Run setup test on \(displays[0].name)"
-            setup.action = #selector(runSetupTest(_:))
-            setup.target = self
-            setup.representedObject = displays[0].id
-        } else if displays.count > 1 {
-            let sub = NSMenu()
-            for d in displays {
-                let i = NSMenuItem(title: d.name, action: #selector(runSetupTest(_:)), keyEquivalent: "")
-                i.target = self
-                i.representedObject = d.id
-                i.isEnabled = idle
-                sub.addItem(i)
-            }
-            setup.submenu = sub
+        if isSessionActive {
+            let reconnectItem = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "")
+            reconnectItem.target = self
+            reconnectItem.isEnabled = !reconnectRequested
+            menu.addItem(reconnectItem)
         }
-        setup.isEnabled = idle && !displays.isEmpty
-        menu.addItem(setup)
 
         menu.addItem(.separator())
         let m = NSMenuItem(title: "Mirror Main Display", action: #selector(toggleMirror), keyEquivalent: "")
         m.target = self
         m.state = mirror.wantsMirror ? .on : .off
         menu.addItem(m)
-        let a = NSMenuItem(title: "Play sound on Display", action: #selector(toggleSound), keyEquivalent: "")
+        let a = NSMenuItem(title: "Play Sound on Display", action: #selector(toggleSound), keyEquivalent: "")
         a.target = self
         a.state = AppSettings.load().playsSoundOnDisplay ? .on : .off
         menu.addItem(a)
+    }
+
+    /// Items for the Testing submenu: one setup test per discovered Display.
+    func testingItems() -> [NSMenuItem] {
+        let idle = session == nil && probeSession == nil
+        if displays.isEmpty {
+            let none = NSMenuItem(title: "Setup Test (no Display found)", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            return [none]
+        }
+        return displays.map { d in
+            let i = NSMenuItem(title: "Run Setup Test on \(d.name)", action: #selector(runSetupTest(_:)), keyEquivalent: "")
+            i.target = self
+            i.representedObject = d.id
+            i.isEnabled = idle
+            return i
+        }
     }
 
     // MARK: Audio (T5.2)

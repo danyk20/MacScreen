@@ -115,29 +115,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildMenu() {
         let menu = NSMenu()
 
-        let title: String
-        switch role {
-        case .host?: title = "MacScreen \u{2014} Host"
-        case .display?: title = "MacScreen \u{2014} Display"
-        case nil: title = "MacScreen \u{2014} choose a role"
+        if role == nil {
+            // First launch: the only thing to do is pick a role.
+            let header = NSMenuItem(title: "Choose how to use this Mac", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            menu.addItem(roleItem("Use as Host (shares its screen)", .host))
+            menu.addItem(roleItem("Use as Display (shows another Mac)", .display))
+        } else {
+            host?.addMenuItems(to: menu)
+            display?.addMenuItems(to: menu)
         }
-        let header = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        menu.addItem(header)
-
-        let hostItem = NSMenuItem(title: "Use as Host", action: #selector(chooseHost), keyEquivalent: "")
-        hostItem.target = self
-        hostItem.state = role == .host ? .on : .off
-        menu.addItem(hostItem)
-
-        let displayItem = NSMenuItem(title: "Use as Display", action: #selector(chooseDisplay), keyEquivalent: "")
-        displayItem.target = self
-        displayItem.state = role == .display ? .on : .off
-        menu.addItem(displayItem)
-
-        menu.addItem(.separator())
-        host?.addMenuItems(to: menu)
-        display?.addMenuItems(to: menu)
         menu.addItem(.separator())
 
         if role != nil {
@@ -145,13 +133,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings.keyEquivalentModifierMask = .command
             settings.target = self
             menu.addItem(settings)
+
+            // Rarely used items live in submenus so the top level stays short.
+            let testing = host?.testingItems() ?? []
+            if !testing.isEmpty { menu.addItem(submenu("Testing", testing)) }
+
+            var debug = display?.debugItems() ?? []
+            let console = NSMenuItem(title: "Open Logs in Console", action: #selector(openConsole), keyEquivalent: "")
+            console.target = self
+            debug.append(console)
+            menu.addItem(submenu("Debugging", debug))
+
+            menu.addItem(submenu("Mode", [roleItem("Host", .host), roleItem("Display", .display)]))
+            menu.addItem(.separator())
         }
 
+        let about = NSMenuItem(title: "About MacScreen", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        menu.addItem(about)
         let quit = NSMenuItem(title: "Quit MacScreen", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.keyEquivalentModifierMask = .command
         menu.addItem(quit)
 
         statusItem?.menu = menu
+    }
+
+    private func roleItem(_ title: String, _ r: Role) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: r == .host ? #selector(chooseHost) : #selector(chooseDisplay), keyEquivalent: "")
+        item.target = self
+        item.state = role == r ? .on : .off
+        return item
+    }
+
+    private func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
+        let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let sub = NSMenu(title: title)
+        items.forEach { sub.addItem($0) }
+        parent.submenu = sub
+        return parent
+    }
+
+    @objc private func openConsole() {
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Console.app"))
     }
 
     private func setRole(_ newRole: Role) {

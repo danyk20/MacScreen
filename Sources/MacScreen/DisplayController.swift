@@ -110,12 +110,16 @@ final class DisplayController {
     }
 
     func addMenuItems(to menu: NSMenu) {
-        let i = NSMenuItem(title: "Show pairing code", action: #selector(showCode), keyEquivalent: "")
+        let i = NSMenuItem(title: "Show Pairing Code", action: #selector(showCode), keyEquivalent: "")
         i.target = self
         menu.addItem(i)
-        let e = NSMenuItem(title: "Export latency CSV", action: #selector(exportLatency), keyEquivalent: "")
+    }
+
+    /// Items for the Debugging submenu.
+    func debugItems() -> [NSMenuItem] {
+        let e = NSMenuItem(title: "Export Latency CSV\u{2026}", action: #selector(exportLatency), keyEquivalent: "")
         e.target = self
-        menu.addItem(e)
+        return [e]
     }
 
     @objc private func exportLatency() {

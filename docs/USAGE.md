@@ -118,8 +118,8 @@ Notes:
 On first launch MacScreen asks for a role, stored in `UserDefaults` under `role`. Use the menu bar
 item **MS**:
 
-- **Use as Host** on the Mac whose screen you want to extend.
-- **Use as Display** on the Mac that will show the extra screen.
+- **Mode → Host** (or **Use as Host** on first launch) on the Mac whose screen you want to extend.
+- **Mode → Display** (or **Use as Display** on first launch) on the Mac that will show the extra screen.
 
 To change the role later, relaunch with `--role host` or `--role display` (see
 [Launch flags](#launch-flags)), or use the same menu items.
@@ -129,7 +129,7 @@ To change the role later, relaunch with `--role host` or `--role display` (see
 Pairing is needed the first time the Host and Display meet, and again if either side forgets the
 other's key. Steps as described in `PLAN.md` §6.5:
 
-1. On the **Display**, open the **MS** menu and choose **Show pairing code**. A 6-digit code is
+1. On the **Display**, open the **MS** menu and choose **Show Pairing Code**. A 6-digit code is
    shown full screen.
 2. On the **Host**, open the **MS** menu, choose **Connect to <Display name>**, and type the 6-digit
    code into the prompt, then click **Pair**.
@@ -151,9 +151,9 @@ The on-screen pairing flow between two physical Macs is **not verified**.
 1. On the Host, choose **Connect to <Display name>** from the **MS** menu. The Display's window
    goes full screen while connected.
 2. Use **Mirror Main Display** in the Host menu to mirror instead of extend (`PLAN.md` §7).
-3. Use **Play sound on Display** to route system audio to the Display (experimental; see
+3. Use **Play Sound on Display** to route system audio to the Display (experimental; see
    [Audio driver](#audio-driver-experimental)).
-4. Use **Run setup test** on the Host to measure the link and encoder for a Display (the probe
+4. Use **Testing → Run Setup Test** on the Host to measure the link and encoder for a Display (the probe
    described in `PLAN.md` §6.10 and `Sources/MSProbe`). Not verified end to end on the Display.
 5. Disconnect with **Disconnect from <Display name>**.
 
@@ -259,7 +259,7 @@ This removes the driver (with `sudo`) and restarts `coreaudiod`, after the same 
 
 ### Using it
 
-Host menu: **Play sound on Display**. The app sets the system default output to the device and
+Host menu: **Play Sound on Display**. The app sets the system default output to the device and
 remembers the previous output. On disconnect it restores that output if the device is still the
 default (`PLAN.md` §6.9).
 
@@ -307,7 +307,7 @@ verified** (`HANDOVER.md`: "idle-screen recovery untested"). If the picture does
 - Check that both Macs are on the same local network and that Local Network permission is granted
   on both.
 - Check that the code is the one currently shown on the Display. A new code can be shown with
-  **Show pairing code** on the Display.
+  **Show Pairing Code** on the Display.
 - If the Display forgot the Host, pairing runs again (see [Pair the two Macs](#pair-the-two-macs-once)).
 
 ### Sound does not appear on the Display
