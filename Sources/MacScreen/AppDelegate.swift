@@ -25,7 +25,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         outputGuard.restoreIfStranded()
         installTerminationSignalHandlers()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "MS"
+        if let url = Bundle.main.url(forResource: "MenuBarIcon@2x", withExtension: "png"),
+           let img = NSImage(contentsOf: url) {
+            img.size = NSSize(width: 18, height: 18)
+            img.isTemplate = true
+            item.button?.image = img
+        } else {
+            item.button?.title = "MS"
+        }
         statusItem = item
         if role == nil {
             role = Dialogs.chooseRole()

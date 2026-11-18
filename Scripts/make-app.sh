@@ -16,6 +16,8 @@ rm -rf "$APP" "$ROOT/build/msprobe"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN_PATH/MacScreen" "$APP/Contents/MacOS/MacScreen"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+mkdir -p "$APP/Contents/Resources"
+cp "$ROOT/Resources/AppIcon.icns" "$ROOT/Resources/MenuBarIcon@2x.png" "$APP/Contents/Resources/"
 cp "$BIN_PATH/msprobe" "$ROOT/build/msprobe"
 
 if [[ -n "${MACSCREEN_SIGN_ID:-}" ]]; then
