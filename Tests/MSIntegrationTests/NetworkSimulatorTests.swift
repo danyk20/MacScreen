@@ -446,7 +446,7 @@ final class NetworkSimulatorTests: XCTestCase {
         XCTAssertFalse(r.bitrates.contains { $0 < 6_000_000 * 6 / 10 }, "jitter alone must not back off")
     }
 
-    /// Provisional decision P2 (G3): the "good Wi-Fi" link measured live (Beachclub, 2026-11-17: RTT ~30 ms,
+    /// Provisional decision P2 (G3): the "good Wi-Fi" link measured live (fast Wi-Fi, 2026-11-17: RTT ~30 ms,
     /// RFC 3550 jitter 5-15 ms, 1 NACK and 0 keyframes per minute). With the P2 defaults (Wi-Fi FEC 0.10, keyframes
     /// +0.10, NACK below 100 ms RTT, size-scaled pacing) rare loss is repaired without a single extra keyframe.
     func testGoodWiFiNeedsNoKeyframes() throws {

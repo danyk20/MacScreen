@@ -40,14 +40,14 @@ Known gaps:
 
 ## Status (2026-11-17, after unattended run)
 
-Committed and pushed to private repo danyk20/MacScreen (HTTPS remote): M0, M1, M2 (T2.1-T2.11),
+Committed and pushed to the GitHub repo (HTTPS remote): M0, M1, M2 (T2.1-T2.11),
 M3 T3.1-T3.6, M4 T4.1-T4.4, M5 T5.1-T5.3 (driver written+compiled, NOT installed), T6.1 (P3),
 T7.1 (docs), T7.2 (cleanup, Scripts/test.sh, Scripts/deploy-display.sh). 0 build warnings.
 Loopback on this Mac confirmed live by the user (virtual display, --windowed, fast).
 T6.3 (10-bit SDR) DROPPED: iMac Main10 decode check failed (software decode). Nothing else planned is open except live checks.
 
 ### First live session on the iMac (2026-11-17)
-Paired and streaming over Wi-Fi (HEVC 4K60 default, G1 applied). Gateway 192.168.43.1 (hotspot-like,
+Paired and streaming over Wi-Fi (HEVC 4K60 default, G1 applied). Gateway on a hotspot-like network (
 slow router, 86 ms avg ping to iMac); iMac Ethernet not connected. Baseline capture->present p50 83 /
 p95 147 ms; render stage 34.7 ms. Tuning: vsync OFF by default on Display cut render to ~7 ms and
 capture->present p50 to ~53-57 ms (p95 ~125-140, mostly Wi-Fi jitter). USER MUST CHECK FOR TEARING;
@@ -61,7 +61,7 @@ iMac state: app in ~/Applications/MacScreen.app (user osx, ssh alias iMac5K), no
   note needs Fable review. Pending Fable questions: intra-refresh/LTR vs Display jitter buffer; re-measure
   mid-session; jitter thresholds 10/25 ms; G3 (needs wired CSV), G4 (driver), G5 (HDR).
 - Link is now measured on EVERY connection (HostController.runLinkCheck, ~2 s, 'Measuring link...'); cache only
-  as FALLBACK keyed by gateway. On Beachclub Wi-Fi: 37-40 Mbit/s measured, 4K60 at 22-24 Mbit/s, presented
+  as FALLBACK keyed by gateway. On the faster Wi-Fi: 37-40 Mbit/s measured, 4K60 at 22-24 Mbit/s, presented
   55-56 fps, capture->present p50 59-63 / p95 ~140 ms. Encoder (27 ms/4K frame, 2 in flight) is the fps limit;
   3200x1800@60 would likely hit a steady 60 (untested, user may want it as Wi-Fi default).
 - Not tested live: final rebuild with `msAutoLinkProbe NO` switch, FALLBACK path, pairing during the check,

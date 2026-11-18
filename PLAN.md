@@ -7,7 +7,7 @@ Thunderbolt/Ethernet second, smooth enough to feel cabled. First target Display 
 iMac 27" 5K Late 2015 (Intel Skylake i5, macOS 12, display-only, no input). The Host is
 this Mac (Apple M2, macOS 27.0.1, Xcode 27.2, Swift 6.4.2).
 
-The repo `/Users/danielkosc/Documents/Projects/MacScreen` is empty except a high-level
+The repo is empty except a high-level
 `PLAN.md`. This document replaces it (task T0.1 copies it into the repo as `PLAN.md`).
 
 Verified on this Mac while planning:
@@ -614,7 +614,7 @@ queueing-delay back-off.
 
 **Provisional decision P2 (Gate G3 + P1 review, 2026-11-18, Opus, to be reviewed by Fable).** Fable out of credits.
 Tuning only, reversible, no wire-format change, HEVC kept. Wired CSV still missing: wired values below are unchanged
-defaults, not measurements. Data (live, iMac 5K over Wi-Fi): good link "Beachclub" HEVC 4K60 30 Mbit/s, 62 s motion:
+defaults, not measurements. Data (live, iMac 5K over Wi-Fi): good link (fast Wi-Fi) HEVC 4K60 30 Mbit/s, 62 s motion:
 60 fps in every 10 s window, capture->present p50 60 / p95 141 ms, render 6.4, decode 4.7, encode ~20-28 ms, recv p50
 6.8 / p95 22 ms, pre-arrival p50 40 / p95 116 ms, present gaps >50 ms 134, >100 ms 56, >200 ms 3 per 74 s, link check
 52 Mbit/s, 1 NACK and 0 keyframes per minute, RFC 3550 jitter 5-15 ms. Old hotspot: 15-20 Mbit/s, RTT 15-180 ms,
