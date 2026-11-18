@@ -92,6 +92,9 @@ private struct SettingsView: View {
             .onAppear { nameDraft = model.deviceName }
             Section(header: Text("General").font(.headline)) {
                 Toggle("Show stats overlay", isOn: $model.settings.statsOverlay)
+                Toggle("Check for updates automatically", isOn: Binding(
+                    get: { model.settings.checksForUpdates },
+                    set: { model.settings.checkForUpdates = $0 }))
                 Toggle("Launch at login", isOn: $model.settings.launchAtLogin)
                     .onChange(of: model.settings.launchAtLogin) { on in
                         guard role == .display else { return }

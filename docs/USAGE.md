@@ -157,6 +157,33 @@ The on-screen pairing flow between two physical Macs is **not verified**.
    described in `PLAN.md` §6.10 and `Sources/MSProbe`). Not verified end to end on the Display.
 5. Disconnect with **Disconnect from <Display name>**.
 
+#### Connect by address (when the Display is not listed)
+
+Discovery uses Bonjour, which guest Wi-Fi, some routers and VPNs block. Then:
+
+1. On the Display, choose **Show Address…** in the MacScreen menu. It lists this Mac's IP address(es).
+2. On the Host, choose **Connect to Address…** and type the address, for example `192.168.1.20`. A
+   `:port` suffix is only needed if the Display says so (the default port is 47800; if it is taken the
+   Display uses another one and shows it). Pairing works exactly as with a discovered Display.
+
+Both Macs must still be able to reach each other on the network (same subnet, or a routed path).
+
+#### Rename a Mac
+
+**Settings… → This Mac → Name**. The Display's name is what the Host lists; the Host's name appears in
+the pairing dialogs. Leave the field empty to use the Mac's own name. A Display re-advertises under the
+new name immediately; a Host uses it from its next connection.
+
+#### Updates
+
+Choose **Check for Updates…** in the menu. If a newer release exists, **Install and Restart** downloads
+it from GitHub, verifies its SHA-256 checksum against the release's `SHA256SUMS.txt`, replaces the app and
+reopens it. The app also checks about once a day (turn this off in Settings → General). Because the app is
+not signed by Apple, macOS may ask the Host to allow Screen Recording again after an update.
+Installing in place needs MacScreen to be in a folder you can write to (normally Applications); otherwise the
+new disk image is opened and you drag the app over the old one. Pre-release builds follow pre-releases and
+stable releases; stable builds follow stable releases only.
+
 Lifecycle, as specified (`PLAN.md` §7):
 
 - If the Display disconnects or the control connection times out, the Host removes the virtual
@@ -214,7 +241,9 @@ from `Sources/MacScreen/SettingsWindow.swift`:
 | Video | HDR | Disabled. Shows "HDR is not supported yet." |
 | Cursor | Cursor mode | Embedded in video, or Overlay (lower latency) |
 | General | Show stats overlay | On or off |
+| General | Check for updates automatically | On (default) or off |
 | General | Launch at login | On or off |
+| This Mac | Name | How this Mac appears to the other Mac; empty = the Mac's own name |
 
 The note in the window says that changes apply to the next connection, and values are limited to
 what the Display supports. The Display's `launch at login` uses
@@ -308,6 +337,7 @@ verified** (`HANDOVER.md`: "idle-screen recovery untested"). If the picture does
   on both.
 - Check that the code is the one currently shown on the Display. A new code can be shown with
   **Show Pairing Code** on the Display.
+- If the Display is not listed at all, use **Connect to Address…** (see [Connect by address](#connect-by-address-when-the-display-is-not-listed)).
 - If the Display forgot the Host, pairing runs again (see [Pair the two Macs](#pair-the-two-macs-once)).
 
 ### Sound does not appear on the Display

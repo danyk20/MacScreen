@@ -44,7 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.display?.setStatsOverlay(s.statsOverlay)
             self?.display?.setSmoothVsync(s.smoothVsyncMode)
         }
+        updates.onChange = { [weak self] in self?.rebuildMenu() }
+        updates.installNote = { [weak self] in
+            let live = "An active session will end while MacScreen restarts."
+            guard self?.role == .host else { return live }
+            return live + " MacScreen is not signed by Apple, so macOS may ask you to allow Screen Recording again."
+        }
         startRole()
+        updates.autoCheckIfDue(enabled: settingsModel.settings.checksForUpdates)
         if role != nil { NSApp.activate(ignoringOtherApps: true) }
         rebuildMenu()
         log.info("Launched with role \(self.role?.rawValue ?? "none", privacy: .public)")
@@ -78,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The identity store of the running role: renames go through it so the in-memory copy and the file agree.
     private var currentStore: IdentityStore?
+    private let updates = UpdateController()
 
     /// Settings "This Mac": empty input restores the Mac's own name. A Display re-advertises under the new name;
     /// a Host with a live session keeps its connection and uses the new name from the next connection.
@@ -171,6 +179,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(.separator())
         }
 
+        let update = NSMenuItem(title: updates.menuTitle, action: #selector(UpdateController.menuAction), keyEquivalent: "")
+        update.target = updates
+        update.isEnabled = updates.menuEnabled
+        menu.addItem(update)
         let about = NSMenuItem(title: "About MacScreen", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         menu.addItem(about)
         let quit = NSMenuItem(title: "Quit MacScreen", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")

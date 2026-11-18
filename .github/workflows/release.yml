@@ -61,6 +61,9 @@ jobs:
           SHORT="${VERSION%%-*}"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SHORT" Resources/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" Resources/Info.plist
+          # The in-app updater compares this full version (pre-release suffix included).
+          /usr/libexec/PlistBuddy -c "Set :MSReleaseVersion ${VERSION}" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :MSReleaseVersion" Resources/Info.plist
 
       - name: Cache SwiftPM build (release, universal)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

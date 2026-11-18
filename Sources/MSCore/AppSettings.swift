@@ -32,6 +32,10 @@ public struct AppSettings: Codable, Equatable {
     public var smoothVsync: Bool?
     public var smoothVsyncMode: Bool { smoothVsync ?? false }
 
+    /// Check GitHub for a newer MacScreen about once a day. Optional so older stored settings still decode.
+    public var checkForUpdates: Bool?
+    public var checksForUpdates: Bool { checkForUpdates ?? true }
+
     public init() {}
 
     public static let heightOptions = [0, 2160, 1440, 1080, 720]
