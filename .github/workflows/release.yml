@@ -1,0 +1,40 @@
+name: Release
+# Push a tag like v1.0.0 to build and publish a GitHub Release with downloadable zips.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build app (universal, ad-hoc signed)
+        run: Scripts/make-app.sh
+      - name: Build audio driver
+        run: Scripts/build-audio-driver.sh
+      - name: Package
+        run: |
+          VER="${GITHUB_REF_NAME:-dev}"
+          mkdir -p dist/audio/build dist/audio/Scripts
+          ditto -c -k --keepParent build/MacScreen.app "dist/MacScreen-${VER}-macOS.zip"
+          cp -R build/MacScreenAudio.driver dist/audio/build/
+          cp Scripts/install-audio-driver.sh Scripts/uninstall-audio-driver.sh dist/audio/Scripts/
+          (cd dist && zip -qry "MacScreen-AudioDriver-${VER}.zip" audio)
+          cp build/msprobe dist/ && (cd dist && zip -qj "msprobe-${VER}-macOS.zip" msprobe)
+          rm -rf dist/audio dist/msprobe
+          ls -la dist
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --title "MacScreen $GITHUB_REF_NAME"
+      - name: Upload artifacts (manual runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: macscreen-dist
+          path: dist/*.zip
