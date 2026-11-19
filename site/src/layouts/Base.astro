@@ -5,8 +5,8 @@ import '../styles/motion.css';
 import interUrl from '../assets/fonts/inter-latin-wght-normal.woff2?url';
 import { site, withBase } from '../data/site';
 
-interface Props { title?: string; description?: string }
-const { title = `${site.name}: ${site.tagline}`, description = site.description } = Astro.props;
+interface Props { title?: string; description?: string; noindex?: boolean }
+const { title = `${site.name}: ${site.tagline}`, description = site.description, noindex = false } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
 const ogImage = new URL(withBase('og.png'), Astro.site).href;
 const jsonLd = {
@@ -29,7 +29,7 @@ const jsonLd = {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <link rel="canonical" href={canonical} />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
     <meta name="theme-color" content="#fbfbfe" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#07081a" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href={withBase('favicon.svg')} type="image/svg+xml" />
@@ -40,7 +40,7 @@ const jsonLd = {
     <meta property="og:site_name" content={site.name} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} />
+    {!noindex && <meta property="og:url" content={canonical} />}
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />

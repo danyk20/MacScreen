@@ -6,7 +6,7 @@ import { getLatestRelease } from '../data/release';
 import { withBase } from '../data/site';
 const latest = await getLatestRelease();
 ---
-<Base title="Page not found · MacScreen">
+<Base title="Page not found · MacScreen" noindex>
   <Nav version={latest.version} dmgUrl={latest.dmgUrl} />
   <main id="main" class="nf">
     <div class="container">

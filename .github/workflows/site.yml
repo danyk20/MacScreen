@@ -76,13 +76,19 @@ jobs:
         run: |
           npm ci
           npm run build
-      - name: Check external links
+      - name: Stage the site under its real base path
+        # Root-relative links like /MacScreen/favicon.svg then resolve on disk exactly as on GitHub Pages.
+        run: |
+          mkdir -p .linkcheck
+          cp -R site/dist .linkcheck/MacScreen
+      - name: Check links
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: >-
-            --no-progress --max-retries 3 --retry-wait-time 5 --timeout 20 --scheme https
-            --exclude '^https://danyk20\.github\.io/MacScreen/sitemap-index\.xml$'
-            'site/dist/**/*.html'
+            --no-progress --max-retries 3 --retry-wait-time 5 --timeout 20 --scheme https --scheme file
+            --root-dir ${{ github.workspace }}/.linkcheck
+            --exclude '^https://danyk20\.github\.io/MacScreen/(sitemap-index\.xml)?$'
+            '.linkcheck/MacScreen/**/*.html'
           fail: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
