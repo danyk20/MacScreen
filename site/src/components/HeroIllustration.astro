@@ -1,0 +1,131 @@
+---
+// A host Mac streams to an old iMac: packets flow across, the iMac lights up, the cursor crosses over.
+// Pure SVG + CSS keyframes (transform and opacity only). Colors come from theme tokens.
+---
+<div class="stage" data-loop>
+  <svg viewBox="0 0 960 400" role="img" aria-labelledby="stage-title stage-desc" preserveAspectRatio="xMidYMid meet">
+    <title id="stage-title">A MacBook streaming its screen to an iMac</title>
+    <desc id="stage-desc">Stream packets travel from the laptop to the iMac, the iMac lights up and shows the same desktop, and the cursor moves across from one screen to the other.</desc>
+    <defs>
+      <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b4dff" /><stop offset=".55" stop-color="#2d4bff" /><stop offset="1" stop-color="#7b4dff" /></linearGradient>
+      <linearGradient id="wall2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#25d6ff" /><stop offset=".6" stop-color="#3a7bff" /><stop offset="1" stop-color="#7b4dff" /></linearGradient>
+      <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#25d6ff" /><stop offset="1" stop-color="#7b4dff" /></linearGradient>
+      <radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#6a5cff" stop-opacity=".55" /><stop offset="1" stop-color="#6a5cff" stop-opacity="0" /></radialGradient>
+      <clipPath id="clip-host"><rect x="84" y="84" width="302" height="178" rx="6" /></clipPath>
+      <clipPath id="clip-imac"><rect x="574" y="54" width="332" height="186" rx="4" /></clipPath>
+    </defs>
+
+    <!-- Glow behind the iMac, brightens as it lights up -->
+    <ellipse class="imac-glow" cx="740" cy="170" rx="300" ry="170" fill="url(#glow)" />
+
+    <!-- Host: MacBook -->
+    <g class="host">
+      <rect x="72" y="72" width="326" height="202" rx="14" fill="var(--mac-bezel)" />
+      <g clip-path="url(#clip-host)">
+        <rect x="84" y="84" width="302" height="178" fill="url(#wall)" />
+        <rect x="104" y="108" width="150" height="104" rx="8" fill="#fff" fill-opacity=".92" />
+        <rect x="104" y="108" width="150" height="16" rx="8" fill="#e4e6fb" />
+        <rect x="116" y="138" width="92" height="7" rx="3.5" fill="#b9bdf0" />
+        <rect x="116" y="154" width="120" height="7" rx="3.5" fill="#d3d6f6" />
+        <rect x="116" y="170" width="70" height="7" rx="3.5" fill="#d3d6f6" />
+        <rect x="262" y="140" width="104" height="84" rx="8" fill="#0e1030" fill-opacity=".55" />
+        <rect x="274" y="154" width="52" height="7" rx="3.5" fill="#fff" fill-opacity=".7" />
+        <rect x="274" y="170" width="78" height="7" rx="3.5" fill="#fff" fill-opacity=".4" />
+      </g>
+      <path d="M44 276h382l-12 20a8 8 0 0 1-7 4H63a8 8 0 0 1-7-4z" fill="var(--mac-body)" />
+      <rect x="196" y="276" width="78" height="6" rx="3" fill="#000" fill-opacity=".18" />
+    </g>
+
+    <!-- Stream -->
+    <g class="stream" fill="none" stroke-linecap="round">
+      <path class="beam" d="M398 168C456 52 520 52 574 138" stroke="url(#beam)" stroke-width="3" stroke-opacity=".4" />
+      <path class="flow flow--a" d="M398 168C456 52 520 52 574 138" stroke="url(#beam)" stroke-width="7" pathLength="100" />
+      <path class="flow flow--b" d="M398 168C456 52 520 52 574 138" stroke="#fff" stroke-opacity=".95" stroke-width="3" pathLength="100" />
+    </g>
+
+    <!-- Display: iMac -->
+    <g class="display">
+      <rect x="562" y="42" width="356" height="236" rx="16" fill="var(--mac-body)" />
+      <rect x="574" y="54" width="332" height="186" rx="4" fill="var(--mac-bezel)" />
+      <g class="imac-content" clip-path="url(#clip-imac)">
+        <rect x="574" y="54" width="332" height="186" fill="url(#wall)" />
+        <rect x="596" y="80" width="164" height="114" rx="9" fill="#fff" fill-opacity=".92" />
+        <rect x="596" y="80" width="164" height="17" rx="9" fill="#e4e6fb" />
+        <rect x="610" y="112" width="100" height="8" rx="4" fill="#b9bdf0" />
+        <rect x="610" y="130" width="132" height="8" rx="4" fill="#d3d6f6" />
+        <rect x="610" y="148" width="76" height="8" rx="4" fill="#d3d6f6" />
+        <rect x="770" y="112" width="114" height="92" rx="9" fill="#0e1030" fill-opacity=".55" />
+        <rect x="783" y="127" width="57" height="8" rx="4" fill="#fff" fill-opacity=".7" />
+        <rect x="783" y="145" width="86" height="8" rx="4" fill="#fff" fill-opacity=".4" />
+      </g>
+      <rect class="imac-off" x="574" y="54" width="332" height="186" rx="4" fill="var(--mac-bezel)" />
+      <circle cx="740" cy="259" r="4.5" fill="var(--mac-bezel)" fill-opacity=".35" />
+      <path d="M706 278h68l12 58H694z" fill="var(--mac-body)" />
+      <rect x="652" y="334" width="176" height="14" rx="7" fill="var(--mac-body)" />
+    </g>
+
+    <!-- Cursor crossing from the laptop to the iMac -->
+    <g class="cursor">
+      <path d="M0 0v30l8.5-7.7 6.2 12.6 5.6-2.8-6.1-12.3H27z" fill="#fff" stroke="#1b1f5e" stroke-width="2.2" stroke-linejoin="round" />
+    </g>
+  </svg>
+</div>
+
+<style>
+  .stage { width: 100%; max-width: 62rem; margin-inline: auto; filter: drop-shadow(0 30px 50px rgb(45 75 255 / 0.18)); }
+  svg { width: 100%; height: auto; overflow: visible; }
+
+  .beam, .flow { opacity: 0; }
+  .flow { stroke-dasharray: 3 22; }
+  .flow--b { stroke-dasharray: 1.2 24; }
+
+  /* One 9 s story: stream starts, iMac wakes, cursor crosses, then it resets. */
+  .stream .flow--a { animation: flowDash 1.6s linear infinite, streamIn 9s var(--ease-inout) infinite; }
+  .stream .flow--b { animation: flowDash 1.1s linear infinite, streamIn 9s var(--ease-inout) infinite; }
+  .stream .beam { animation: streamIn 9s var(--ease-inout) infinite; }
+  .imac-off { animation: wake 9s var(--ease-inout) infinite; }
+  .imac-glow { opacity: 0; animation: glowUp 9s var(--ease-inout) infinite; transform-origin: 740px 170px; }
+  .cursor { animation: cross 9s var(--ease-inout) infinite; opacity: 0; }
+  .display { animation: nudge 9s var(--ease-inout) infinite; transform-origin: 740px 160px; }
+
+  @keyframes flowDash { to { stroke-dashoffset: -100; } }
+  @keyframes streamIn {
+    0%, 8% { opacity: 0; }
+    16%, 74% { opacity: 1; }
+    86%, 100% { opacity: 0; }
+  }
+  @keyframes wake {
+    0%, 12% { opacity: 1; }
+    26%, 80% { opacity: 0; }
+    92%, 100% { opacity: 1; }
+  }
+  @keyframes glowUp {
+    0%, 14% { opacity: 0; transform: scale(0.92); }
+    30%, 78% { opacity: 1; transform: scale(1); }
+    92%, 100% { opacity: 0; transform: scale(0.92); }
+  }
+  @keyframes nudge {
+    0%, 100% { transform: translateY(0); }
+    40%, 70% { transform: translateY(-3px); }
+  }
+  @keyframes cross {
+    0%, 30% { opacity: 0; transform: translate(310px, 150px); }
+    34% { opacity: 1; transform: translate(310px, 150px); }
+    52% { transform: translate(470px, 70px); }
+    66% { transform: translate(640px, 120px); }
+    72%, 80% { opacity: 1; transform: translate(668px, 140px); }
+    88%, 100% { opacity: 0; transform: translate(668px, 140px); }
+  }
+
+  .is-paused * { animation-play-state: paused !important; }
+
+  /* Static end state for reduced motion and when scripts or animation are unavailable. */
+  @media (prefers-reduced-motion: reduce) {
+    .stream .flow, .stream .beam { animation: none; opacity: 1; }
+    .stream .flow--a { stroke-dasharray: 3 22; }
+    .imac-off { animation: none; opacity: 0; }
+    .imac-glow { animation: none; opacity: 1; }
+    .cursor { animation: none; opacity: 1; transform: translate(668px, 140px); }
+    .display { animation: none; }
+  }
+</style>

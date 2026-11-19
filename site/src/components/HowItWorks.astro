@@ -1,0 +1,43 @@
+---
+const steps = [
+  { n: '01', title: 'A real extra display', body: 'Your Mac adds a virtual display sized to the other screen, so windows, Mission Control and the Dock treat it like any monitor.', fig: 'Up to 4K, HiDPI' },
+  { n: '02', title: 'Only that screen is captured', body: 'ScreenCaptureKit grabs the extra display alone. Your main desktop is never sent.', fig: 'Just the extra screen' },
+  { n: '03', title: 'Hardware encoding', body: 'The video encoder built into your Mac compresses every frame with HEVC, keeping the CPU free.', fig: 'HEVC, typically 20–40 Mbit/s on Wi-Fi' },
+  { n: '04', title: 'Encrypted, resilient stream', body: 'Frames travel over UDP, encrypted, with error correction and retransmission so a lost packet is not a glitch.', fig: 'ChaCha20-Poly1305 · FEC + retransmit' },
+  { n: '05', title: 'Drawn at native resolution', body: 'The other Mac decodes the video and draws it with Metal, full screen, with an optional cursor overlay and sound.', fig: 'About 50–60 fps measured on Wi-Fi' },
+];
+---
+<section class="section" id="how-it-works" aria-labelledby="how-title">
+  <div class="container">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">How it works</span>
+      <h2 class="h2" id="how-title">From your Mac to another screen in five steps.</h2>
+      <p class="lede">No dongle, no account, no cloud. Your Mac streams a display straight to the other Mac on your network.</p>
+    </div>
+    <ol class="steps">
+      {steps.map((s, i) => (
+        <li class="step card" data-reveal style={`--reveal-i:${i}`}>
+          <span class="step__n">{s.n}</span>
+          <h3 class="step__t">{s.title}</h3>
+          <p class="step__b">{s.body}</p>
+          <p class="step__f">{s.fig}</p>
+        </li>
+      ))}
+    </ol>
+  </div>
+</section>
+
+<style>
+  .steps { display: grid; gap: var(--space-4); grid-template-columns: 1fr; counter-reset: none; }
+  @media (min-width: 40rem) { .steps { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 64rem) { .steps { grid-template-columns: repeat(5, 1fr); } }
+  .step { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); }
+  .step:hover { transform: translateY(-4px); box-shadow: var(--shadow-m); border-color: var(--border-strong); }
+  .step__n {
+    font-family: var(--font-mono); font-size: var(--step--1); font-weight: 600; color: var(--accent);
+    background: var(--accent-soft); width: fit-content; padding: 0.15rem 0.6rem; border-radius: var(--radius-pill);
+  }
+  .step__t { font-size: var(--step-1); line-height: 1.25; letter-spacing: -0.02em; }
+  .step__b { color: var(--muted); font-size: var(--step--1); line-height: 1.55; flex: 1; }
+  .step__f { font-size: var(--step--1); font-weight: 600; padding-top: var(--space-3); border-top: 1px solid var(--border); }
+</style>

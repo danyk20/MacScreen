@@ -1,0 +1,15 @@
+/* Motion: reveal-on-scroll and the pause switch used by looping illustrations.
+   Only transform and opacity are animated. Everything is static under prefers-reduced-motion
+   and when JavaScript is off (the .js class is added by reveal.ts). */
+
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity var(--dur-hero) var(--ease-out), transform var(--dur-hero) var(--ease-out);
+  transition-delay: calc(var(--reveal-i, 0) * 90ms);
+}
+.js [data-reveal].is-visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .js [data-reveal] { opacity: 1; transform: none; transition: none; }
+}
