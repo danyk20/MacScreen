@@ -1,0 +1,53 @@
+---
+import { site } from '../data/site';
+const items = [
+  { q: 'Which Macs can be the Display?', a: `Any Mac with a screen running macOS 12 or later. It has been tested on a 27-inch 5K iMac (Late 2015) running macOS 12.7. The Host, the Mac whose screen you extend, needs macOS 12.3 or later and has been tested on an Apple Silicon Mac.` },
+  { q: 'Wi-Fi or cable?', a: 'Both work. MacScreen prefers Ethernet or a Thunderbolt Bridge when it finds one and falls back to Wi-Fi. A cable gives the most stable picture. So far the project has measured Wi-Fi only; wired numbers are still to come.' },
+  { q: 'How is this different from Sidecar?', a: 'Sidecar turns an iPad into a display. It does not use another Mac as the screen. MacScreen is made for the Mac-to-Mac case, including older Macs that no longer get OS updates.' },
+  { q: 'Why does macOS warn me the first time I open it?', a: 'MacScreen is not notarized by Apple yet, which needs a paid developer account. Right-click the app and choose Open once, or install with Homebrew, which clears the warning. Notarization is on the roadmap.' },
+  { q: 'Is it safe?', a: 'Everything is encrypted between your two Macs, pairing needs a code and a click on the Display, and there is no account or cloud. The code is open for you to read. It has not been independently audited yet.' },
+  { q: 'Does it need the internet?', a: 'No. The Macs talk to each other directly on your network. The only internet request is an optional update check to GitHub, which you can turn off in Settings.' },
+  { q: 'Will a macOS update break it?', a: 'It might. The extra display is created with a macOS interface that Apple has not published, so a future update could change it. That is the trade-off for something macOS does not offer out of the box. The project is open source and tracks new macOS releases.' },
+  { q: 'Does it support HDR, sound or several Displays?', a: 'Sound is supported (experimental, through a small virtual audio device). HDR is not supported, and one Display connects at a time.' },
+  { q: 'How do I uninstall it?', a: 'Quit MacScreen and delete the app. To remove its saved pairings, delete the MacScreen folder in ~/Library/Application Support. If you installed the audio driver, run its uninstall script from the audio driver download.' },
+];
+---
+<section class="section faq" id="faq" aria-labelledby="faq-title">
+  <div class="container faq__inner">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">FAQ</span>
+      <h2 class="h2" id="faq-title">Questions, answered.</h2>
+      <p class="lede">Something missing? <a href={site.issuesUrl} rel="noopener">Ask on GitHub</a>.</p>
+    </div>
+    <div class="list" data-reveal>
+      {items.map((it) => (
+        <details>
+          <summary>{it.q}<span class="chev" aria-hidden="true"></span></summary>
+          <div class="body"><p>{it.a}</p></div>
+        </details>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .faq__inner { max-width: 52rem; }
+  .list { border-top: 1px solid var(--border); }
+  details { border-bottom: 1px solid var(--border); }
+  summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+    padding: var(--space-5) 0; font-weight: 600; font-size: var(--step-1); letter-spacing: -0.015em;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary:hover { color: var(--accent); }
+  .chev { flex: none; width: 0.6rem; height: 0.6rem; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform var(--dur-slow) var(--ease-out); }
+  details[open] .chev { transform: rotate(-135deg) translateY(-2px); }
+  .body { padding-bottom: var(--space-5); color: var(--muted); max-width: 44rem; }
+
+  /* Smooth open/close where the browser supports animating to auto height. */
+  @supports (interpolate-size: allow-keywords) {
+    :global(:root) { interpolate-size: allow-keywords; }
+    details::details-content { block-size: 0; overflow: clip; transition: block-size var(--dur-slow) var(--ease-out), content-visibility var(--dur-slow) allow-discrete; }
+    details[open]::details-content { block-size: auto; }
+  }
+</style>

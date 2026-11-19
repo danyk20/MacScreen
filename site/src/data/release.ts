@@ -7,6 +7,7 @@ export interface ReleaseInfo {
   prerelease: boolean;
   date: string;
   pageUrl: string;
+  /** Empty for early releases that shipped without a disk image. */
   dmgUrl: string;
   notes: string;
 }
@@ -31,8 +32,8 @@ export function getReleases(): Promise<ReleaseInfo[]> {
 }
 
 export async function getLatestRelease(): Promise<ReleaseInfo> {
-  const [latest] = await getReleases();
-  if (!latest) throw new Error('No release data available');
+  const latest = (await getReleases()).find((r) => r.dmgUrl);
+  if (!latest) throw new Error('No downloadable release available');
   return latest;
 }
 
@@ -55,14 +56,13 @@ async function load(): Promise<ReleaseInfo[]> {
 
 function toInfo(r: GitHubRelease): ReleaseInfo[] {
   const dmg = r.assets.find((a) => a.name === `MacScreen-${r.tag_name}.dmg`);
-  if (!dmg) return [];
   return [{
     version: r.tag_name.replace(/^v/, ''),
     tag: r.tag_name,
     prerelease: r.prerelease,
     date: (r.published_at ?? '').slice(0, 10),
     pageUrl: r.html_url,
-    dmgUrl: dmg.browser_download_url,
+    dmgUrl: dmg?.browser_download_url ?? '',
     notes: r.body ?? '',
   }];
 }

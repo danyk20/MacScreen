@@ -381,17 +381,19 @@ Limits of this design:
 - **Private API:** the virtual display uses `CGVirtualDisplay`, which is not public. It may stop
   working in a macOS update. The code is built against the macOS 27 SDK with a 12.0 deployment
   target (`PLAN.md` §1).
-- **Not notarized:** the app is signed with a self-signed certificate or ad-hoc. macOS Gatekeeper
-  may warn on first launch. Notarization needs a paid developer account, which is out of scope
-  (`PLAN.md` §11).
-- **No HDR:** the HDR toggle in Settings is disabled. HDR and 10-bit output are milestone M6 work,
-  and the HDR gate G5 is open (`PLAN.md` §8, §9).
-- **Wi-Fi not tested:** the connection has never been tested over Wi-Fi. Wi-Fi is the first target
-  in the plan, so this is the main open risk (`PLAN.md` §1).
-- **Display hardware not verified live:** the planned iMac 27" 5K Late 2015 Display has not been
-  tested. A probe run on it is waiting on the user (`HANDOVER.md`).
+- **Not notarized:** the app is signed ad-hoc, so macOS Gatekeeper warns on first launch (right-click, Open) and the
+  Host may be asked to allow Screen Recording again after an update. Notarization needs a paid Apple Developer
+  account and is on the roadmap. Installing with Homebrew clears the first-launch warning.
+- **No HDR or 10-bit:** the HDR toggle in Settings is disabled. HDR was dropped for v1, and 10-bit output was tested
+  and set aside because the 2015 iMac decodes 10-bit HEVC in software (`docs/hdr-spike.md`).
+- **Wi-Fi measured on one setup:** streaming over Wi-Fi works (about 50-60 fps and a median of roughly 55-60 ms
+  capture-to-present on a 2015 5K iMac in our tests). Results depend on the router. Wired links (Ethernet,
+  Thunderbolt Bridge) are supported but their numbers have not been measured yet.
+- **One Display model verified live:** the 27-inch 5K iMac (Late 2015, macOS 12.7). Other Display Macs are expected to
+  work but are untested.
 - **Encoder limit:** 5K at 60 fps cannot be encoded in real time on the M2. 4K at 60 fps is the
   realistic top setting (`HANDOVER.md`). No H.264 candidates above 4096×2304.
 - **One Display at a time** and **no input from the Display** (`PLAN.md` §11).
-- **Audio driver untested on macOS 27** (gate G4 open).
+- **Audio is experimental:** the driver works on macOS 27 with good quality and sync in our testing, but needs a manual
+  install (administrator password) and has had little long-run testing.
 - **Host macOS older than 12.3** is out of scope (`PLAN.md` §11).

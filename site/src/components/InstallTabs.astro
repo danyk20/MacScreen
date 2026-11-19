@@ -1,0 +1,95 @@
+---
+import { site } from '../data/site';
+interface Props { version: string; dmgUrl: string }
+const { version, dmgUrl } = Astro.props;
+const steps = [
+  { t: 'Open MacScreen on both Macs', d: 'Choose Use as Host on the Mac whose screen you want to extend, and Use as Display on the other one.' },
+  { t: 'Pick the Display', d: 'In the menu bar on the Host, choose Connect to and the name of the other Mac. Not listed? Use Connect to Address.' },
+  { t: 'Enter the pairing code', d: 'The first time, type the 6-digit code shown on the Display, then click Allow there. After that it is one click.' },
+];
+---
+<section class="section install" id="install" aria-labelledby="install-title">
+  <div class="container">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">Install</span>
+      <h2 class="h2" id="install-title">Two minutes from download to second screen.</h2>
+      <p class="lede">Install MacScreen on both Macs. It is the same app; you choose each Mac’s role when you open it.</p>
+    </div>
+
+    <div class="tabs" data-tabs data-reveal>
+      <div class="tablist" role="tablist" aria-label="Installation method">
+        <button role="tab" id="tab-brew" aria-controls="panel-brew" aria-selected="true">Homebrew</button>
+        <button role="tab" id="tab-dmg" aria-controls="panel-dmg" aria-selected="false" tabindex="-1">Download</button>
+        <button role="tab" id="tab-src" aria-controls="panel-src" aria-selected="false" tabindex="-1">Build from source</button>
+      </div>
+
+      <div class="panel" role="tabpanel" id="panel-brew" aria-labelledby="tab-brew" tabindex="0">
+        <p>One command per step. Homebrew also clears the first-launch warning for you.</p>
+        <div class="code"><code>{site.brewTap}</code><button class="copy" type="button" data-copy={site.brewTap} aria-label="Copy tap command"><span data-copy-label>Copy</span></button></div>
+        <div class="code"><code>{site.brewInstall}</code><button class="copy" type="button" data-copy={site.brewInstall} aria-label="Copy install command"><span data-copy-label>Copy</span></button></div>
+      </div>
+
+      <div class="panel" role="tabpanel" id="panel-dmg" aria-labelledby="tab-dmg" tabindex="0">
+        <p>Download the disk image, open it, and drag MacScreen to Applications.</p>
+        <p><a class="btn btn--primary" href={dmgUrl}>Download v{version}</a></p>
+        <p class="tip"><strong>First launch:</strong> MacScreen is not notarized by Apple yet, so macOS asks for confirmation once. Right-click the app, choose <em>Open</em>, then <em>Open</em> again. Or run <code>xattr -dr com.apple.quarantine /Applications/MacScreen.app</code>.</p>
+        <p class="tip">Each release includes <code>SHA256SUMS.txt</code> and a signed build provenance attestation, so you can check your download.</p>
+      </div>
+
+      <div class="panel" role="tabpanel" id="panel-src" aria-labelledby="tab-src" tabindex="0">
+        <p>Needs Xcode command line tools with Swift 5.9 or later.</p>
+        <div class="code"><code>git clone {site.repoUrl}.git</code><button class="copy" type="button" data-copy={`git clone ${site.repoUrl}.git`} aria-label="Copy clone command"><span data-copy-label>Copy</span></button></div>
+        <div class="code"><code>cd MacScreen && Scripts/make-app.sh</code><button class="copy" type="button" data-copy="cd MacScreen && Scripts/make-app.sh" aria-label="Copy build command"><span data-copy-label>Copy</span></button></div>
+        <p class="tip">The app lands in <code>build/MacScreen.app</code>. Full steps and signing notes are in the <a href={site.docsUrl} rel="noopener">documentation</a>.</p>
+      </div>
+    </div>
+
+    <h3 class="pair-title" data-reveal>Then pair in three steps</h3>
+    <ol class="pair">
+      {steps.map((s, i) => (
+        <li data-reveal style={`--reveal-i:${i}`}>
+          <span class="pair__n" aria-hidden="true">{i + 1}</span>
+          <div><strong>{s.t}</strong><p>{s.d}</p></div>
+        </li>
+      ))}
+    </ol>
+    <p class="more"><a href={site.docsUrl} rel="noopener">Read the full guide →</a></p>
+  </div>
+</section>
+
+<style>
+  .tabs { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-l); box-shadow: var(--shadow-m); overflow: hidden; max-width: 50rem; }
+  .tablist { display: flex; gap: var(--space-1); padding: var(--space-2); background: var(--surface-2); border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tablist [role='tab'] {
+    flex: 1 0 auto; min-height: 2.75rem; padding: 0.5rem 1rem; border: 0; border-radius: var(--radius-m); background: transparent;
+    color: var(--muted); font-weight: 600; cursor: pointer; transition: background var(--dur-base), color var(--dur-base), box-shadow var(--dur-base);
+  }
+  .tablist [role='tab']:hover { color: var(--text); }
+  .tablist [role='tab'][aria-selected='true'] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-s); }
+  .panel { padding: var(--space-6); display: grid; gap: var(--space-4); }
+  .panel[hidden] { display: none; }
+  .tabs:not(.is-enhanced) .tablist { display: none; }
+  .tabs:not(.is-enhanced) .panel + .panel { border-top: 1px solid var(--border); }
+  .panel p { color: var(--muted); }
+  .tip { font-size: var(--step--1); padding: var(--space-4); border-radius: var(--radius-m); background: var(--accent-soft); color: var(--text) !important; }
+  .tip code { background: var(--surface); padding: 0.1rem 0.4rem; border-radius: 6px; }
+
+  .code { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 0.75rem 0.75rem 0.75rem 1rem; border-radius: var(--radius-m); background: #0b0d24; color: #e8eaff; overflow-x: auto; }
+  .code code { white-space: nowrap; font-size: var(--step--1); }
+  .copy {
+    flex: none; min-height: 2rem; padding: 0.3rem 0.8rem; border-radius: var(--radius-pill); border: 1px solid rgb(255 255 255 / 0.2);
+    background: rgb(255 255 255 / 0.08); color: #fff; font-size: var(--step--1); font-weight: 600; cursor: pointer;
+    transition: background var(--dur-base), transform var(--dur-fast);
+  }
+  .copy:hover { background: rgb(255 255 255 / 0.16); }
+  .copy:active { transform: scale(0.95); }
+  .copy.is-done { background: #1f8f5f; border-color: transparent; }
+
+  .pair-title { font-size: var(--step-2); letter-spacing: -0.02em; margin: var(--space-8) 0 var(--space-5); }
+  .pair { display: grid; gap: var(--space-4); grid-template-columns: 1fr; }
+  @media (min-width: 52rem) { .pair { grid-template-columns: repeat(3, 1fr); } }
+  .pair li { display: flex; gap: var(--space-4); align-items: flex-start; }
+  .pair__n { flex: none; display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--brand-gradient); color: #fff; font-weight: 700; }
+  .pair p { color: var(--muted); font-size: var(--step--1); margin-top: var(--space-1); }
+  .more { margin-top: var(--space-6); font-weight: 600; }
+</style>

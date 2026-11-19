@@ -1,0 +1,46 @@
+---
+const features = [
+  { icon: 'M4 6h16v10H4zM9 20h6M12 16v4', title: 'Up to 4K at 60 fps', body: 'Hardware HEVC encoding keeps the picture sharp and your Mac cool. About 50–60 fps delivered over Wi-Fi in our tests.' },
+  { icon: 'M13 3 4 14h7l-1 7 9-11h-7z', title: 'Feels immediate', body: 'Around 60 ms from your screen to theirs at the median on Wi-Fi, with an optional cursor overlay for snappy pointer movement.' },
+  { icon: 'M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01', title: 'Wi-Fi or cable', body: 'Uses Ethernet or Thunderbolt Bridge when it is there and falls back to Wi-Fi when it is not.' },
+  { icon: 'M4 18V9l8-5 8 5v9M9 18v-5h6v5', title: 'Adapts to your network', body: 'Measures the link every time you connect and picks resolution and bitrate that it can actually carry.' },
+  { icon: 'M11 5 6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13', title: 'Sound too', body: 'Optionally plays your Mac’s audio on the other Mac, through a small virtual audio device. Experimental.' },
+  { icon: 'M3 5h8v8H3zM13 11h8v8h-8z', title: 'Extend or mirror', body: 'Add a real second screen for more room, or mirror your main display when you want to show something.' },
+  { icon: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5', title: 'Reconnects by itself', body: 'Sleep, wake, a dropped network: MacScreen picks the connection back up without you touching anything.' },
+  { icon: 'M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6zM9 12l2 2 4-4', title: 'Private by design', body: 'Paired once with a code, encrypted end to end, no account, no cloud, no analytics.' },
+];
+---
+<section class="section features" id="features" aria-labelledby="features-title">
+  <div class="container">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">Features</span>
+      <h2 class="h2" id="features-title">Everything a second screen should be.</h2>
+      <p class="lede">Built for one job: making another Mac feel like a monitor on your desk.</p>
+    </div>
+    <ul class="grid">
+      {features.map((f, i) => (
+        <li class="card feature" data-reveal style={`--reveal-i:${i % 4}`}>
+          <span class="feature__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d={f.icon} /></svg>
+          </span>
+          <h3>{f.title}</h3>
+          <p>{f.body}</p>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  .grid { display: grid; gap: var(--space-4); grid-template-columns: 1fr; }
+  @media (min-width: 40rem) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 64rem) { .grid { grid-template-columns: repeat(4, 1fr); } }
+  .feature { display: flex; flex-direction: column; gap: var(--space-3); }
+  .feature:hover { transform: translateY(-4px); box-shadow: var(--shadow-m); border-color: var(--border-strong); }
+  .feature__icon {
+    display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: var(--radius-s);
+    color: var(--accent); background: var(--accent-soft);
+  }
+  .feature h3 { font-size: var(--step-1); letter-spacing: -0.02em; line-height: 1.25; }
+  .feature p { color: var(--muted); font-size: var(--step--1); line-height: 1.6; }
+</style>

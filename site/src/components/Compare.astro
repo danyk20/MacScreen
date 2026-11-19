@@ -1,0 +1,70 @@
+---
+import { products, rows, sources, verifiedOn } from '../data/compare';
+const icon = { yes: 'M5 12.5l4.2 4.2L19 7', no: 'M6 6l12 12M18 6 6 18', neutral: 'M6 12h12' } as const;
+const sr = { yes: 'Yes: ', no: 'No: ', neutral: '' } as const;
+---
+<section class="section compare" id="compare" aria-labelledby="compare-title">
+  <div class="container">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">Compare</span>
+      <h2 class="h2" id="compare-title">How MacScreen compares.</h2>
+      <p class="lede">The other tools are good at what they do. MacScreen’s focus is narrow: reuse a Mac you already own as the extra screen, with no extra hardware and no subscription.</p>
+    </div>
+
+    <div class="scroller" data-reveal tabindex="0" role="region" aria-labelledby="compare-title">
+      <table>
+        <caption class="visually-hidden">Feature comparison of MacScreen with Sidecar, Duet Display, Luna Display, Deskreen and spacedesk</caption>
+        <thead>
+          <tr>
+            <td></td>
+            {products.map((p) => <th scope="col" class:list={[{ us: p.us }]}>{p.name}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <th scope="row">{r.label}</th>
+              {products.map((p) => {
+                const c = r.cells[p.id]!;
+                return (
+                  <td class:list={[`tone-${c.tone}`, { us: p.us }]}>
+                    <span class="cell">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon[c.tone]} /></svg>
+                      <span><span class="visually-hidden">{sr[c.tone]}</span>{c.text}</span>
+                    </span>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="fine" data-reveal>
+      Compiled from each vendor's own pages in {verifiedOn}. Features and prices change, so check the vendor before you buy.
+      "Not confirmed" and "Not stated" mean we could not verify the answer on the vendor's pages. Sources:
+      {sources.map((s, i) => (<><a href={s.url} rel="noopener">{s.name}</a>{i < sources.length - 1 ? ', ' : '.'}</>))}
+    </p>
+  </div>
+</section>
+
+<style>
+  .scroller { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-m); }
+  table { width: 100%; min-width: 58rem; border-collapse: separate; border-spacing: 0; font-size: var(--step--1); }
+  th, td { padding: 0.95rem 1rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+  thead th { font-size: var(--step-0); letter-spacing: -0.01em; white-space: nowrap; }
+  tbody th { font-weight: 600; min-width: 11rem; position: sticky; left: 0; background: var(--surface); z-index: 1; }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+  .us { background: var(--accent-soft); }
+  thead th.us { color: var(--accent); }
+  tbody th { box-shadow: 1px 0 0 var(--border); }
+  .cell { display: inline-flex; gap: 0.5rem; align-items: flex-start; }
+  .cell svg { flex: none; margin-top: 0.15rem; }
+  .tone-yes svg { color: var(--good); }
+  .tone-no svg { color: #c2410c; }
+  :global(:root[data-theme='dark']) .tone-no svg { color: #fb923c; }
+  @media (prefers-color-scheme: dark) { :global(:root:not([data-theme='light'])) .tone-no svg { color: #fb923c; } }
+  .tone-neutral svg { color: var(--muted); }
+  .fine { margin-top: var(--space-5); color: var(--muted); font-size: var(--step--1); max-width: 56rem; }
+</style>

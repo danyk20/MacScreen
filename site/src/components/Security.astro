@@ -1,0 +1,39 @@
+---
+import { site } from '../data/site';
+const points = [
+  { t: 'Encrypted end to end', d: 'Every frame and message is sealed with ChaCha20-Poly1305 using keys agreed through an X25519 exchange that both Macs sign with Ed25519 identity keys.' },
+  { t: 'Pair once, with a code', d: 'The first connection shows a 6-digit code on the Display that you type on the Host, and the Display owner must click Allow. After that the two Macs recognise each other.' },
+  { t: 'No account, no cloud, no tracking', d: 'Video goes straight from one Mac to the other. This website uses no cookies or analytics, and the app has none either.' },
+  { t: 'One optional internet request', d: 'The only thing MacScreen ever fetches from the internet is the release list from GitHub, to tell you about updates. You can turn it off in Settings.' },
+];
+---
+<section class="section security" id="security" aria-labelledby="security-title">
+  <div class="container">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">Security and privacy</span>
+      <h2 class="h2" id="security-title">Your screen stays between your Macs.</h2>
+      <p class="lede">MacScreen is open source under the MIT license, so you can read exactly what it does.</p>
+    </div>
+    <ul class="grid">
+      {points.map((p, i) => (
+        <li class="card" data-reveal style={`--reveal-i:${i % 2}`}>
+          <h3>{p.t}</h3>
+          <p>{p.d}</p>
+        </li>
+      ))}
+    </ul>
+    <p class="honest" data-reveal>
+      <strong>Honest note:</strong> the design has not had an independent security review yet, and the pairing code is a
+      human check, so pair on a network you trust. The details are in the
+      <a href={`${site.docsUrl}`} rel="noopener">security summary</a>.
+    </p>
+  </div>
+</section>
+
+<style>
+  .grid { display: grid; gap: var(--space-4); grid-template-columns: 1fr; }
+  @media (min-width: 52rem) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  .card h3 { font-size: var(--step-1); letter-spacing: -0.02em; margin-bottom: var(--space-2); }
+  .card p { color: var(--muted); }
+  .honest { margin-top: var(--space-6); padding: var(--space-5); border-radius: var(--radius-m); background: var(--accent-soft); max-width: 60rem; }
+</style>

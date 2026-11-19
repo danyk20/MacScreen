@@ -1,0 +1,63 @@
+---
+import { getReleases } from '../data/release';
+import { summaries, roadmap } from '../data/changelog';
+const releases = (await getReleases()).slice(0, 6);
+const fmt = (d: string) => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }) : '';
+---
+<section class="section changelog" id="changelog" aria-labelledby="changelog-title">
+  <div class="container grid">
+    <div>
+      <div class="section-head" data-reveal>
+        <span class="eyebrow">Changelog</span>
+        <h2 class="h2" id="changelog-title">What’s new.</h2>
+      </div>
+      <ol class="releases">
+        {releases.map((r, i) => (
+          <li class="release" data-reveal style={`--reveal-i:${i}`}>
+            <div class="release__head">
+              <a class="release__v" href={r.pageUrl} rel="noopener">v{r.version}</a>
+              {r.prerelease && <span class="badge">Pre-release</span>}
+              <time datetime={r.date}>{fmt(r.date)}</time>
+            </div>
+            {summaries[r.version]
+              ? <ul>{summaries[r.version]!.map((s) => <li>{s}</li>)}</ul>
+              : <p><a href={r.pageUrl} rel="noopener">Release notes on GitHub</a></p>}
+          </li>
+        ))}
+      </ol>
+    </div>
+
+    <aside id="roadmap" aria-labelledby="roadmap-title">
+      <div class="section-head" data-reveal>
+        <span class="eyebrow">Roadmap</span>
+        <h2 class="h2" id="roadmap-title">Where it’s going.</h2>
+      </div>
+      <div class="card" data-reveal>
+        <h3>Planned</h3>
+        <ul class="rm">{roadmap.next.map((x) => <li><strong>{x.t}</strong><span>{x.d}</span></li>)}</ul>
+        <h3>Not planned for 1.0</h3>
+        <ul class="rm">{roadmap.notPlanned.map((x) => <li><strong>{x.t}</strong><span>{x.d}</span></li>)}</ul>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<style>
+  .grid { display: grid; gap: var(--space-8); grid-template-columns: 1fr; }
+  @media (min-width: 64rem) { .grid { grid-template-columns: 1.1fr 1fr; gap: var(--space-9); } }
+  .releases { display: grid; gap: var(--space-6); border-left: 2px solid var(--border); padding-left: var(--space-5); }
+  .release { position: relative; }
+  .release::before { content: ''; position: absolute; left: calc(-1 * var(--space-5) - 6px); top: 0.55rem; width: 10px; height: 10px; border-radius: 50%; background: var(--brand-gradient); box-shadow: 0 0 0 4px var(--bg); }
+  .release__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .release__v { font-family: var(--font-mono); font-weight: 600; font-size: var(--step-1); color: var(--text); text-decoration: none; }
+  .release__v:hover { color: var(--accent); }
+  time { color: var(--muted); font-size: var(--step--1); }
+  .release ul { display: grid; gap: var(--space-2); color: var(--muted); }
+  .release ul li { padding-left: 1.1rem; position: relative; }
+  .release ul li::before { content: ''; position: absolute; left: 0; top: 0.65em; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  .card h3 { font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--space-4); }
+  .card h3:not(:first-child) { margin-top: var(--space-6); }
+  .rm { display: grid; gap: var(--space-4); }
+  .rm li { display: grid; gap: 0.15rem; }
+  .rm span { color: var(--muted); font-size: var(--step--1); }
+</style>
