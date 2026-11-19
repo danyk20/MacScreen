@@ -1,0 +1,47 @@
+---
+import Logo from './Logo.astro';
+import { site } from '../data/site';
+const year = new Date().getFullYear();
+---
+<footer class="footer">
+  <div class="container footer__grid">
+    <div class="footer__brand">
+      <a class="footer__logo" href="#top"><Logo /><span>{site.name}</span></a>
+      <p>Free and open source under the MIT license. Not affiliated with Apple.</p>
+    </div>
+    <nav aria-label="Project">
+      <h2 class="footer__h">Project</h2>
+      <ul>
+        <li><a href={site.repoUrl} rel="noopener">GitHub</a></li>
+        <li><a href={site.releasesUrl} rel="noopener">Releases</a></li>
+        <li><a href={site.docsUrl} rel="noopener">Documentation</a></li>
+        <li><a href={site.licenseUrl} rel="noopener">License</a></li>
+      </ul>
+    </nav>
+    <nav aria-label="Community">
+      <h2 class="footer__h">Get help</h2>
+      <ul>
+        <li><a href={site.newIssueBug} rel="noopener">Report a problem</a></li>
+        <li><a href={site.newIssueFeature} rel="noopener">Request a feature</a></li>
+        <li><a href={site.issuesUrl} rel="noopener">All issues</a></li>
+      </ul>
+    </nav>
+  </div>
+  <div class="container footer__legal">
+    <span>&copy; {year} MacScreen contributors</span>
+    <span>macOS and iMac are trademarks of Apple Inc.</span>
+  </div>
+</footer>
+
+<style>
+  .footer { border-top: 1px solid var(--border); background: var(--surface-2); padding-block: var(--space-8) var(--space-6); }
+  .footer__grid { display: grid; gap: var(--space-7); grid-template-columns: 1fr; }
+  @media (min-width: 40rem) { .footer__grid { grid-template-columns: 2fr 1fr 1fr; } }
+  .footer__logo { display: inline-flex; align-items: center; gap: 0.6rem; font-weight: 700; color: var(--text); text-decoration: none; margin-bottom: var(--space-3); }
+  .footer__brand p { color: var(--muted); max-width: 22rem; font-size: var(--step--1); }
+  .footer__h { font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--space-4); font-weight: 600; }
+  .footer ul { display: grid; gap: var(--space-3); }
+  .footer li a { color: var(--text); text-decoration: none; }
+  .footer li a:hover { color: var(--accent); text-decoration: underline; }
+  .footer__legal { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-7); padding-top: var(--space-5); border-top: 1px solid var(--border); color: var(--muted); font-size: var(--step--1); }
+</style>

@@ -1,0 +1,13 @@
+{
+  "releases": [
+    {
+      "version": "0.1.0-beta.3",
+      "tag": "v0.1.0-beta.3",
+      "prerelease": true,
+      "date": "2026-11-18",
+      "pageUrl": "https://github.com/danyk20/MacScreen/releases/tag/v0.1.0-beta.3",
+      "dmgUrl": "https://github.com/danyk20/MacScreen/releases/download/v0.1.0-beta.3/MacScreen-v0.1.0-beta.3.dmg",
+      "notes": "Connect by address, rename your Mac, in-app update check, new icon and menu."
+    }
+  ]
+}
