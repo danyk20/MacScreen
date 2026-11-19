@@ -1,6 +1,14 @@
 # MacScreen
 
-**Website:** https://danyk20.github.io/MacScreen/
+> **Any Mac's screen, as if it were plugged into yours.**
+
+[**Website**](https://danyk20.github.io/MacScreen/) ·
+[**Download**](https://github.com/danyk20/MacScreen/releases/latest) ·
+[Documentation](docs/USAGE.md) ·
+[Report a problem](https://github.com/danyk20/MacScreen/issues/new?template=bug_report.yml)
+
+The [project website](https://danyk20.github.io/MacScreen/) has the overview, a comparison with other tools,
+install steps and the changelog.
 
 MacScreen turns a second Mac into an external display for another Mac. The **Host** creates a
 virtual display, captures it, encodes it with the hardware video encoder and streams it over the
@@ -9,8 +17,8 @@ sent the same way through a virtual audio device.
 
 Goal: a display that feels cabled. Wi-Fi first, Thunderbolt or Ethernet second.
 
-**Status:** early development, version 0.1.0. Not notarized. Not yet verified end to end on the
-intended Display hardware. See [Known limits](docs/USAGE.md#known-limits).
+**Status:** beta (pre-release). Not notarized. Verified live on a 27-inch 5K iMac (Late 2015) as the Display and an
+Apple Silicon Mac as the Host. See [Known limits](docs/USAGE.md#known-limits).
 
 ## Install
 

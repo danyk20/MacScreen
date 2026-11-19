@@ -22,7 +22,7 @@ const latest = await getLatestRelease();
       <div class="container hero__inner">
         <span class="badge">Beta · v{latest.version}</span>
         <h1>{site.tagline}</h1>
-        <p class="lede">{site.description}</p>
+        <p class="lede">{site.heroSub}</p>
         <div class="hero__cta">
           <a class="btn btn--primary" href={latest.dmgUrl}>Download for macOS</a>
           <a class="btn" href={site.repoUrl} rel="noopener">View on GitHub</a>
@@ -49,7 +49,7 @@ const latest = await getLatestRelease();
     background: radial-gradient(40% 50% at 25% 30%, var(--mesh-a), transparent 70%), radial-gradient(35% 45% at 80% 20%, var(--mesh-b), transparent 70%);
   }
   .hero__inner { display: grid; justify-items: center; text-align: center; gap: var(--space-5); }
-  h1 { font-size: var(--step-5); line-height: 1.02; letter-spacing: -0.04em; font-weight: 750; max-width: 16ch; text-wrap: balance; }
+  h1 { font-size: var(--step-5); line-height: 1.02; letter-spacing: -0.04em; font-weight: 750; max-width: 19ch; text-wrap: balance; }
   .hero__cta { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); margin-top: var(--space-3); }
   .hero__note { color: var(--muted); font-size: var(--step--1); }
   .hero__stage { margin-top: clamp(2.5rem, 1.5rem + 4vw, 5rem); }

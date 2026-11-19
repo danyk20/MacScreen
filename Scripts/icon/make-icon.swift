@@ -137,9 +137,9 @@ save(renderRect(width: 1200, height: 630) { c in
     c.saveGState(); c.translateBy(x: 72, y: 410); c.scaleBy(x: 168 / 1024, y: 168 / 1024); drawIcon(c, bleed: false); c.restoreGState()
     text("MacScreen", size: 40, weight: .bold, color: .white, in: CGRect(x: 262, y: 440, width: 600, height: 60), kern: -0.6)
     text("Beta  \u{B7}  Free and open source", size: 24, weight: .medium, color: NSColor(white: 1, alpha: 0.7), in: CGRect(x: 262, y: 408, width: 600, height: 34))
-    text("Give your old iMac a second life as a display.", size: 76, weight: .bold, color: .white,
+    text("Any Mac’s screen, as if it were plugged into yours.", size: 76, weight: .bold, color: .white,
          in: CGRect(x: 72, y: 130, width: 1056, height: 250), lineHeight: 84, kern: -2)
-    text("Use any Mac as a second screen for another Mac. Up to 5K at 60 fps.", size: 28, weight: .regular,
+    text("Turn any Mac into an extra display. Up to 5K, free and open source.", size: 28, weight: .regular,
          color: NSColor(white: 1, alpha: 0.78), in: CGRect(x: 72, y: 62, width: 1000, height: 70))
 }, "og.png")
 

@@ -11,9 +11,13 @@ export const site = {
   licenseUrl: 'https://github.com/danyk20/MacScreen/blob/main/LICENSE',
   brewTap: 'brew tap danyk20/macscreen https://github.com/danyk20/MacScreen',
   brewInstall: 'brew install --cask macscreen',
-  tagline: 'Give your old iMac a second life as a display.',
+  tagline: 'Any Mac’s screen, as if it were plugged into yours.',
+  /** Hero subhead. */
+  heroSub:
+    'MacScreen turns any Mac into an extra display for another Mac over Wi-Fi or cable. Windows, Mission Control and the Dock treat it like a real monitor. Up to 5K, free and open source.',
+  /** Meta description (kept short for search results). */
   description:
-    'MacScreen streams a virtual display from your Mac to any other Mac over Wi-Fi or cable. Up to 5K at 60 fps, depending on your Macs and network. Free and open source.',
+    'Use any Mac’s screen as if it were plugged into yours. MacScreen turns another Mac into an extra display over Wi-Fi or cable. Free and open source.',
 } as const;
 
 /** Prefix a path with the deployment base ("/MacScreen/" on GitHub Pages). */
