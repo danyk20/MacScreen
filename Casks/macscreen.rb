@@ -5,7 +5,7 @@ cask "macscreen" do
   url "https://github.com/danyk20/MacScreen/releases/download/v#{version}/MacScreen-v#{version}.dmg"
   name "MacScreen"
   desc "Extend your screen onto a second computer"
-  homepage "https://github.com/danyk20/MacScreen"
+  homepage "https://danyk20.github.io/MacScreen/"
 
   depends_on macos: :monterey
 

@@ -32,7 +32,7 @@ Status markers used below:
 | Network | Local network. Wi-Fi: **not verified**. Ethernet or Thunderbolt Bridge: planned, not verified | `PLAN.md` §7 |
 
 The Host needs hardware HEVC or H.264 encoding. The plan notes that the M2 can encode 4K at 60 fps
-in real time but not 5K at 60 fps, so 4K60 is the highest setting expected to work
+in real time but not 5K at 60 fps, so 4K60 is the highest 60 fps setting expected to work (native 5K at 30 fps is available as a manual choice)
 (`HANDOVER.md`).
 
 ## Build from source
@@ -391,8 +391,10 @@ Limits of this design:
   Thunderbolt Bridge) are supported but their numbers have not been measured yet.
 - **One Display model verified live:** the 27-inch 5K iMac (Late 2015, macOS 12.7). Other Display Macs are expected to
   work but are untested.
-- **Encoder limit:** 5K at 60 fps cannot be encoded in real time on the M2. 4K at 60 fps is the
-  realistic top setting (`HANDOVER.md`). No H.264 candidates above 4096×2304.
+- **Encoder limit:** 5K at 60 fps cannot be encoded in real time on the M2 we tested; native 5K runs at 30 fps (manual
+  choice in Settings). Faster Macs may manage 5K at 60 fps (Settings → Resolution: native, Frame rate: 60), but that is
+  untested and also needs a fast network. 4K at 60 fps is the
+  realistic top 60 fps setting (`HANDOVER.md`). No H.264 candidates above 4096×2304.
 - **One Display at a time** and **no input from the Display** (`PLAN.md` §11).
 - **Audio is experimental:** the driver works on macOS 27 with good quality and sync in our testing, but needs a manual
   install (administrator password) and has had little long-run testing.

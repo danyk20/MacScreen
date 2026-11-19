@@ -1,5 +1,7 @@
 # MacScreen
 
+**Website:** https://danyk20.github.io/MacScreen/
+
 MacScreen turns a second Mac into an external display for another Mac. The **Host** creates a
 virtual display, captures it, encodes it with the hardware video encoder and streams it over the
 network. The **Display** Mac decodes the stream and shows it full screen. Sound can optionally be

@@ -40,15 +40,24 @@ func squircle(_ r: CGRect) -> CGPath {
     p.closeSubpath(); return p
 }
 
-let icon = render(size: 1024) { c in
-    // soft drop shadow under the tile
+/// The app icon artwork. `bleed` fills the whole canvas edge to edge (for apple-touch-icon); otherwise it is the
+/// macOS squircle tile with a soft shadow.
+func drawIcon(_ c: CGContext, bleed: Bool) {
+    let shape = bleed ? CGPath(rect: tile, transform: nil) : squircle(tile)
     c.saveGState()
-    c.setShadow(offset: CGSize(width: 0, height: -14), blur: 28, color: col(0x000000, 0.35))
-    c.addPath(squircle(tile)); c.setFillColor(col(0x1B1F5E)); c.fillPath()
-    c.restoreGState()
+    if bleed {
+        c.scaleBy(x: 1024 / tile.width, y: 1024 / tile.height)
+        c.translateBy(x: -tile.minX, y: -tile.minY)
+    } else {
+        // soft drop shadow under the tile
+        c.saveGState()
+        c.setShadow(offset: CGSize(width: 0, height: -14), blur: 28, color: col(0x000000, 0.35))
+        c.addPath(shape); c.setFillColor(col(0x1B1F5E)); c.fillPath()
+        c.restoreGState()
+    }
 
     // tile background: deep indigo -> electric blue, diagonal
-    c.saveGState(); c.addPath(squircle(tile)); c.clip()
+    c.saveGState(); c.addPath(shape); c.clip()
     c.drawLinearGradient(grad([col(0x6A5CFF), col(0x2D4BFF), col(0x0B1A7A)], [0, 0.5, 1]),
         start: CGPoint(x: tile.minX, y: tile.maxY), end: CGPoint(x: tile.maxX, y: tile.minY), options: [])
     // light bloom top-left
@@ -92,10 +101,47 @@ let icon = render(size: 1024) { c in
 
     // inner top highlight on tile edge
     c.restoreGState()
-    c.saveGState(); c.addPath(squircle(tile.insetBy(dx: 3, dy: 3))); c.setStrokeColor(col(0xFFFFFF, 0.28)); c.setLineWidth(5); c.strokePath()
+    if !bleed {
+        c.saveGState(); c.addPath(squircle(tile.insetBy(dx: 3, dy: 3))); c.setStrokeColor(col(0xFFFFFF, 0.28)); c.setLineWidth(5); c.strokePath()
+        c.restoreGState()
+    }
     c.restoreGState()
 }
-save(icon, "icon_1024.png")
+save(render(size: 1024) { drawIcon($0, bleed: false) }, "icon_1024.png")
+save(render(size: 180) { drawIcon($0, bleed: true) }, "apple_touch_180.png")
+
+// Open Graph / social preview card, 1200x630.
+func renderRect(width: Int, height: Int, _ draw: (CGContext) -> Void) -> NSBitmapImageRep {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let g = NSGraphicsContext(bitmapImageRep: rep)!
+    NSGraphicsContext.current = g
+    draw(g.cgContext)
+    return rep
+}
+func text(_ s: String, size: CGFloat, weight: NSFont.Weight, color: NSColor, in rect: CGRect, lineHeight: CGFloat? = nil, kern: CGFloat = 0) {
+    let style = NSMutableParagraphStyle()
+    if let lh = lineHeight { style.minimumLineHeight = lh; style.maximumLineHeight = lh }
+    let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: color,
+                                                .paragraphStyle: style, .kern: kern]
+    NSAttributedString(string: s, attributes: attrs).draw(with: rect, options: [.usesLineFragmentOrigin])
+}
+save(renderRect(width: 1200, height: 630) { c in
+    c.drawLinearGradient(grad([col(0x07081A), col(0x14186A), col(0x2D4BFF)], [0, 0.6, 1]),
+        start: CGPoint(x: 0, y: 630), end: CGPoint(x: 1200, y: 0), options: [])
+    c.drawRadialGradient(grad([col(0x25D6FF, 0.35), col(0x25D6FF, 0)], [0, 1]),
+        startCenter: CGPoint(x: 1000, y: 120), startRadius: 0, endCenter: CGPoint(x: 1000, y: 120), endRadius: 460, options: [])
+    c.drawRadialGradient(grad([col(0x6A5CFF, 0.5), col(0x6A5CFF, 0)], [0, 1]),
+        startCenter: CGPoint(x: 150, y: 560), startRadius: 0, endCenter: CGPoint(x: 150, y: 560), endRadius: 420, options: [])
+    // icon tile
+    c.saveGState(); c.translateBy(x: 72, y: 410); c.scaleBy(x: 168 / 1024, y: 168 / 1024); drawIcon(c, bleed: false); c.restoreGState()
+    text("MacScreen", size: 40, weight: .bold, color: .white, in: CGRect(x: 262, y: 440, width: 600, height: 60), kern: -0.6)
+    text("Beta  \u{B7}  Free and open source", size: 24, weight: .medium, color: NSColor(white: 1, alpha: 0.7), in: CGRect(x: 262, y: 408, width: 600, height: 34))
+    text("Give your old iMac a second life as a display.", size: 76, weight: .bold, color: .white,
+         in: CGRect(x: 72, y: 130, width: 1056, height: 250), lineHeight: 84, kern: -2)
+    text("Use any Mac as a second screen for another Mac. Up to 5K at 60 fps.", size: 28, weight: .regular,
+         color: NSColor(white: 1, alpha: 0.78), in: CGRect(x: 72, y: 62, width: 1000, height: 70))
+}, "og.png")
 
 // Menu bar template glyph: two overlapping screens, black on clear (18pt @1x/2x/3x -> render 108 and let AppKit scale).
 let glyph = render(size: 72) { c in

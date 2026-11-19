@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Read the documentation first
+    url: https://github.com/danyk20/MacScreen/blob/main/docs/USAGE.md
+    about: Install, pairing, settings, troubleshooting and known limits.

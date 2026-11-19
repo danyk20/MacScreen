@@ -13,7 +13,7 @@ export const site = {
   brewInstall: 'brew install --cask macscreen',
   tagline: 'Give your old iMac a second life as a display.',
   description:
-    'MacScreen streams a virtual display from your Mac to any other Mac over Wi-Fi or cable. Up to 4K at 60 fps. Free and open source.',
+    'MacScreen streams a virtual display from your Mac to any other Mac over Wi-Fi or cable. Up to 5K at 60 fps, depending on your Macs and network. Free and open source.',
 } as const;
 
 /** Prefix a path with the deployment base ("/MacScreen/" on GitHub Pages). */

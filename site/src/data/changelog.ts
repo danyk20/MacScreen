@@ -11,7 +11,7 @@ export const summaries: Record<string, string[]> = {
     'Disk image (DMG) download and Homebrew install',
     'Cleaner menu: everyday actions on top, the rest under Testing and Debugging',
   ],
-  '0.1.0-beta.1': ['First public pre-release: Host and Display, pairing, 4K streaming, sound and cursor overlay'],
+  '0.1.0-beta.1': ['First public pre-release: Host and Display, pairing, 4K and 5K streaming, sound and cursor overlay'],
 };
 
 export const roadmap = {

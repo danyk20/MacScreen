@@ -11,7 +11,7 @@ const sr = { yes: 'Yes: ', no: 'No: ', neutral: '' } as const;
       <p class="lede">The other tools are good at what they do. MacScreen’s focus is narrow: reuse a Mac you already own as the extra screen, with no extra hardware and no subscription.</p>
     </div>
 
-    <div class="scroller" data-reveal tabindex="0" role="region" aria-labelledby="compare-title">
+    <section class="scroller" data-reveal tabindex="0" aria-label="Comparison table, scrollable">
       <table>
         <caption class="visually-hidden">Feature comparison of MacScreen with Sidecar, Duet Display, Luna Display, Deskreen and spacedesk</caption>
         <thead>
@@ -39,7 +39,7 @@ const sr = { yes: 'Yes: ', no: 'No: ', neutral: '' } as const;
           ))}
         </tbody>
       </table>
-    </div>
+    </section>
 
     <p class="fine" data-reveal>
       Compiled from each vendor's own pages in {verifiedOn}. Features and prices change, so check the vendor before you buy.
@@ -50,7 +50,7 @@ const sr = { yes: 'Yes: ', no: 'No: ', neutral: '' } as const;
 </section>
 
 <style>
-  .scroller { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-m); }
+  .scroller { position: relative; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-m); }
   table { width: 100%; min-width: 58rem; border-collapse: separate; border-spacing: 0; font-size: var(--step--1); }
   th, td { padding: 0.95rem 1rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
   thead th { font-size: var(--step-0); letter-spacing: -0.01em; white-space: nowrap; }

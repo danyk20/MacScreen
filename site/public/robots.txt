@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://danyk20.github.io/MacScreen/sitemap-index.xml

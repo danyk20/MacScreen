@@ -1,0 +1,46 @@
+name: Report a problem
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping. Please check the [troubleshooting section](https://github.com/danyk20/MacScreen/blob/main/docs/USAGE.md#troubleshooting) first.
+  - type: input
+    id: version
+    attributes:
+      label: MacScreen version
+      description: Menu bar icon, then About MacScreen (for example 0.1.0-beta.3).
+    validations: { required: true }
+  - type: input
+    id: host
+    attributes:
+      label: Host Mac and macOS version
+      placeholder: MacBook Pro M2, macOS 27
+    validations: { required: true }
+  - type: input
+    id: display
+    attributes:
+      label: Display Mac and macOS version
+      placeholder: iMac 27" 5K (Late 2015), macOS 12.7.6
+    validations: { required: true }
+  - type: dropdown
+    id: link
+    attributes:
+      label: Connection
+      options: [Wi-Fi, Ethernet, Thunderbolt Bridge, Not sure]
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: In Console.app search for "app.macscreen", or run `log show --last 5m --predicate 'subsystem == "app.macscreen"'`. Remove anything private.
+      render: shell

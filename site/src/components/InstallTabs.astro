@@ -18,9 +18,9 @@ const steps = [
 
     <div class="tabs" data-tabs data-reveal>
       <div class="tablist" role="tablist" aria-label="Installation method">
-        <button role="tab" id="tab-brew" aria-controls="panel-brew" aria-selected="true">Homebrew</button>
-        <button role="tab" id="tab-dmg" aria-controls="panel-dmg" aria-selected="false" tabindex="-1">Download</button>
-        <button role="tab" id="tab-src" aria-controls="panel-src" aria-selected="false" tabindex="-1">Build from source</button>
+        <button type="button" role="tab" id="tab-brew" aria-controls="panel-brew" aria-selected="true">Homebrew</button>
+        <button type="button" role="tab" id="tab-dmg" aria-controls="panel-dmg" aria-selected="false" tabindex="-1">Download</button>
+        <button type="button" role="tab" id="tab-src" aria-controls="panel-src" aria-selected="false" tabindex="-1">Build from source</button>
       </div>
 
       <div class="panel" role="tabpanel" id="panel-brew" aria-labelledby="tab-brew" tabindex="0">
@@ -39,7 +39,7 @@ const steps = [
       <div class="panel" role="tabpanel" id="panel-src" aria-labelledby="tab-src" tabindex="0">
         <p>Needs Xcode command line tools with Swift 5.9 or later.</p>
         <div class="code"><code>git clone {site.repoUrl}.git</code><button class="copy" type="button" data-copy={`git clone ${site.repoUrl}.git`} aria-label="Copy clone command"><span data-copy-label>Copy</span></button></div>
-        <div class="code"><code>cd MacScreen && Scripts/make-app.sh</code><button class="copy" type="button" data-copy="cd MacScreen && Scripts/make-app.sh" aria-label="Copy build command"><span data-copy-label>Copy</span></button></div>
+        <div class="code"><code>cd MacScreen &amp;&amp; Scripts/make-app.sh</code><button class="copy" type="button" data-copy="cd MacScreen && Scripts/make-app.sh" aria-label="Copy build command"><span data-copy-label>Copy</span></button></div>
         <p class="tip">The app lands in <code>build/MacScreen.app</code>. Full steps and signing notes are in the <a href={site.docsUrl} rel="noopener">documentation</a>.</p>
       </div>
     </div>

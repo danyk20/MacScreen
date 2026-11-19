@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerates Resources/AppIcon.icns and Resources/MenuBarIcon@2x.png from make-icon.swift.
+# Regenerates Resources/AppIcon.icns, Resources/MenuBarIcon@2x.png and the website icons/social card (site/public).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
@@ -11,4 +11,6 @@ for sz in 16 32 128 256 512; do
 done
 iconutil -c icns "$S" -o "$ROOT/Resources/AppIcon.icns"
 cp "$T/menubar_template.png" "$ROOT/Resources/MenuBarIcon@2x.png"
-echo "wrote Resources/AppIcon.icns and Resources/MenuBarIcon@2x.png"
+cp "$T/apple_touch_180.png" "$ROOT/site/public/apple-touch-icon.png"
+cp "$T/og.png" "$ROOT/site/public/og.png"
+echo "wrote Resources/AppIcon.icns, Resources/MenuBarIcon@2x.png, site/public/apple-touch-icon.png, site/public/og.png"

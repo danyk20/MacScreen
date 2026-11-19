@@ -2,6 +2,7 @@
 import { site } from '../data/site';
 const items = [
   { q: 'Which Macs can be the Display?', a: `Any Mac with a screen running macOS 12 or later. It has been tested on a 27-inch 5K iMac (Late 2015) running macOS 12.7. The Host, the Mac whose screen you extend, needs macOS 12.3 or later and has been tested on an Apple Silicon Mac.` },
+  { q: 'What resolution and frame rate will I get?', a: 'MacScreen measures your link each time you connect and picks a setting it can carry, normally 4K at 60 fps. In Settings you can choose the Display’s full native 5K and 30 or 60 fps yourself. On our M2 test Mac, 4K at 60 fps runs smoothly and native 5K runs at 30 fps; 5K at 60 fps is beyond that encoder. A faster Mac and a fast network may manage it, and it is available to try.' },
   { q: 'Wi-Fi or cable?', a: 'Both work. MacScreen prefers Ethernet or a Thunderbolt Bridge when it finds one and falls back to Wi-Fi. A cable gives the most stable picture. So far the project has measured Wi-Fi only; wired numbers are still to come.' },
   { q: 'How is this different from Sidecar?', a: 'Sidecar turns an iPad into a display. It does not use another Mac as the screen. MacScreen is made for the Mac-to-Mac case, including older Macs that no longer get OS updates.' },
   { q: 'Why does macOS warn me the first time I open it?', a: 'MacScreen is not notarized by Apple yet, which needs a paid developer account. Right-click the app and choose Open once, or install with Homebrew, which clears the warning. Notarization is on the roadmap.' },
