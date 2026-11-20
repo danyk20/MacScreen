@@ -74,7 +74,7 @@ final class DisplayController {
         }
         sink = AppSink(rs)
         let p = power
-        sink.onConnected = { DispatchQueue.main.async { p.hostConnected() } }
+        sink.onConnected = { DispatchQueue.main.async { Dialogs.dismissInformational(); p.hostConnected() } }
         sink.onDisconnected = { DispatchQueue.main.async { p.hostDisconnected() } }
         sink.onHostState = { s in DispatchQueue.main.async { p.hostStateChanged(displayAsleep: s.displayAsleep) } }
         session = DisplaySession(identityStore: store, capabilities: caps, sink: sink,
@@ -131,7 +131,8 @@ final class DisplayController {
             }.joined(separator: "\n")
         window.runningDialog {
             _ = Dialogs.alert("Address of this Display",
-                              "On the Host choose Connect to Address\u{2026} and enter:\n\n\(lines)")
+                              "On the Host choose Connect to Address\u{2026} and enter:\n\n\(lines)",
+                              dismissOnConnect: true)
         }
     }
 
@@ -157,10 +158,11 @@ final class DisplayController {
     @objc private func showCode() {
         window.runningDialog {
             if let c = sink.currentCode {
-                _ = Dialogs.alert("Pairing code for \(c.host)", c.code)
+                _ = Dialogs.alert("Pairing code for \(c.host)", c.code, dismissOnConnect: true)
             } else {
                 _ = Dialogs.alert("No pairing in progress",
-                                  "A code appears here when a Host that this Mac does not know connects.")
+                                  "A code appears here when a Host that this Mac does not know connects.",
+                                  dismissOnConnect: true)
             }
         }
     }

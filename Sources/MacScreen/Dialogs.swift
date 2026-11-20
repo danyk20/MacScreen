@@ -2,13 +2,28 @@ import AppKit
 
 /// Modal helpers (main thread only). The app is an accessory app, so activate before showing.
 enum Dialogs {
-    static func alert(_ title: String, _ info: String, buttons: [String] = ["OK"]) -> NSApplication.ModalResponse {
+    /// The informational alert currently on screen, if it may be closed automatically (see `dismissInformational`).
+    private static var dismissible: NSWindow?
+
+    /// `dismissOnConnect`: for read-only information (an address, a pairing code) that has no use once a Host is
+    /// connected. A modal alert would otherwise sit above the full-screen picture until someone clicks it with the
+    /// Display Mac's own mouse.
+    static func alert(_ title: String, _ info: String, buttons: [String] = ["OK"],
+                      dismissOnConnect: Bool = false) -> NSApplication.ModalResponse {
         NSApp.activate(ignoringOtherApps: true)
         let a = NSAlert()
         a.messageText = title
         a.informativeText = info
         buttons.forEach { a.addButton(withTitle: $0) }
+        if dismissOnConnect { dismissible = a.window }
+        defer { if dismissOnConnect { dismissible = nil } }
         return a.runModal()
+    }
+
+    /// Closes an open informational alert (main thread). Does nothing for other dialogs, such as "Allow this Host?".
+    static func dismissInformational() {
+        guard let w = dismissible, NSApp.modalWindow === w else { return }
+        NSApp.abortModal()
     }
 
     /// Returns the typed text, or nil when cancelled.
