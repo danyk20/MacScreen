@@ -45,7 +45,8 @@ final class StatsClockTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.05)
         let dtMs = Double(MonoClock.nowMicros() - start) / 1000
         XCTAssertGreaterThan(dtMs, 40)
-        XCTAssertLessThan(dtMs, 200)
+        // Upper bound only guards against a unit error (1000x); a loaded CI machine can deschedule the thread for 100+ ms.
+        XCTAssertLessThan(dtMs, 2000)
         XCTAssertEqual(MonoClock.micros(fromMachTicks: 0), 0)
         _ = MonoClock.micros(fromMachTicks: UInt64.max)  // must not trap
     }
