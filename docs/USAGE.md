@@ -89,9 +89,13 @@ imports it into the login keychain. Notes:
   notarized.
 - The script prints the same guidance when it finishes.
 
-Status: `HANDOVER.md` records the dev certificate as installed on the Host. That Screen Recording
-permission survives rebuilds with this identity is the documented intent (`make-dev-cert.sh`), not
-yet checked in a log.
+**Release builds** are signed in CI with a separate self-signed certificate (`MacScreen Release`, stored as the
+repository secrets `MACSCREEN_SIGN_P12` and `MACSCREEN_SIGN_P12_PASSWORD`). Because every release carries the same
+signing identity, macOS keeps the Screen Recording permission across updates. The identity is
+`identifier "app.macscreen.MacScreen" and certificate leaf = <certificate hash>`, which does not change from build
+to build, unlike the hash of an ad-hoc signature. Without the secrets (a fork, for example) the workflow falls back to
+ad-hoc signing. The certificate is self-signed, so this does not remove the Gatekeeper first-launch warning; only
+notarization does. The first release signed this way asks for Screen Recording one last time; later updates do not.
 
 ## Permissions
 

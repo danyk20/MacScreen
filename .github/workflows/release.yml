@@ -73,11 +73,46 @@ jobs:
           restore-keys: |
             spm-release-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
 
-      - name: Build app (universal, ad-hoc signed)
+      # A stable signing identity keeps the macOS Screen Recording permission across updates: the app's identity
+      # then depends on this certificate, not on the hash of each build. Without the secrets (a fork, a dry run
+      # on a copy) the build falls back to ad-hoc signing.
+      - name: Import signing certificate
+        id: sign
+        env:
+          P12: ${{ secrets.MACSCREEN_SIGN_P12 }}
+          P12_PASSWORD: ${{ secrets.MACSCREEN_SIGN_P12_PASSWORD }}
+        run: |
+          if [[ -z "$P12" ]]; then
+            echo "No signing secrets: building ad-hoc signed."
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KP="$(uuidgen)"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/release.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KP" "$KC" > /dev/null
+          # Keychain paths on the runner contain no spaces, so word splitting here is intended.
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/release.p12"
+          HASH="$(security find-certificate -c 'MacScreen Release' -Z "$KC" | awk '/SHA-1 hash:/ {print $3; exit}')"
+          [[ -n "$HASH" ]] || { echo "Signing certificate not found after import" >&2; exit 1; }
+          echo "MACSCREEN_SIGN_ID=$HASH" >> "$GITHUB_ENV"
+          echo "Signing with certificate $HASH"
+
+      - name: Build app (universal)
         run: Scripts/make-app.sh
 
       - name: Build audio driver
         run: Scripts/build-audio-driver.sh
+
+      - name: Show signing identity
+        run: |
+          codesign -d -r- build/MacScreen.app 2>&1 | grep designated
+          codesign --verify --deep --strict build/MacScreen.app
 
       - name: Package
         env:

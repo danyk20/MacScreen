@@ -54,7 +54,7 @@ enum Dialogs {
 
     static func screenRecordingGuidance() {
         let r = alert("Screen Recording permission needed",
-                      "MacScreen captures a virtual display and needs Screen Recording access. Enable MacScreen in System Settings > Privacy & Security > Screen Recording, then quit and reopen the app.",
+                      "MacScreen captures a virtual display and needs Screen Recording access. Enable MacScreen in System Settings > Privacy & Security > Screen Recording, then quit and reopen the app.\n\nAlready switched on? After an update macOS can keep showing the old entry as enabled. Turn MacScreen off and on again, or remove it with the minus button and add it again.",
                       buttons: ["Open System Settings", "Cancel"])
         if r == .alertFirstButtonReturn,
            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
