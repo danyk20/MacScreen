@@ -1,6 +1,15 @@
 /** Hand-written release summaries, keyed by version. Dates and links come from GitHub at build time; a release that
  *  is not listed here is shown with a link to its notes. */
 export const summaries: Record<string, string[]> = {
+  '0.1.0-beta.5': [
+    'Updates now keep your Screen Recording permission: releases are signed with a stable certificate',
+    'Clearer guidance when Screen Recording access is missing',
+    'Documentation refreshed',
+  ],
+  '0.1.0-beta.4': [
+    'Pairing code and address dialogs on the Display close by themselves once a Host connects',
+    'More reliable automated tests on busy build machines',
+  ],
   '0.1.0-beta.3': [
     'Connect to a Display by IP address when automatic discovery is blocked',
     'Rename your Mac in Settings; the new name shows on the other Mac',
