@@ -5,6 +5,7 @@ import Footer from '../components/Footer.astro';
 import HeroIllustration from '../components/HeroIllustration.astro';
 import HowItWorks from '../components/HowItWorks.astro';
 import Features from '../components/Features.astro';
+import Privacy from '../components/Privacy.astro';
 import Compare from '../components/Compare.astro';
 import InstallTabs from '../components/InstallTabs.astro';
 import Security from '../components/Security.astro';
@@ -27,12 +28,13 @@ const latest = await getLatestRelease();
           <a class="btn btn--primary" href={latest.dmgUrl}>Download for macOS</a>
           <a class="btn" href={site.repoUrl} rel="noopener">View on GitHub</a>
         </div>
-        <p class="hero__note">macOS 12 or later · Apple Silicon and Intel · Free</p>
+        <p class="hero__note">Free · No sign-up, no email, no card · Nothing collected · macOS 12 or later, Apple Silicon and Intel</p>
       </div>
       <div class="container hero__stage"><HeroIllustration /></div>
     </section>
     <HowItWorks />
     <Features />
+    <Privacy />
     <Compare />
     <InstallTabs version={latest.version} dmgUrl={latest.dmgUrl} />
     <Security />

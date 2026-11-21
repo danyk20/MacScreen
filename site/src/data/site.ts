@@ -14,10 +14,10 @@ export const site = {
   tagline: 'Any Mac’s screen, as if it were plugged into yours.',
   /** Hero subhead. */
   heroSub:
-    'MacScreen turns any Mac into an extra display for another Mac over Wi-Fi or cable. Windows, Mission Control and the Dock treat it like a real monitor. Up to 5K, free and open source.',
+    'MacScreen turns any Mac into an extra display for another Mac over Wi-Fi or cable. Windows, Mission Control and the Dock treat it like a real monitor. Up to 5K, free and open source, with no sign-up and no data collected.',
   /** Meta description (kept short for search results). */
   description:
-    'Use any Mac’s screen as if it were plugged into yours. MacScreen turns another Mac into an extra display over Wi-Fi or cable. Free and open source.',
+    'Use any Mac’s screen as if it were plugged into yours. MacScreen turns another Mac into an extra display over Wi-Fi or cable. Free, open source, no account or email, and no data collected.',
 } as const;
 
 /** Prefix a path with the deployment base ("/MacScreen/" on GitHub Pages). */

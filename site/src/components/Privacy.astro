@@ -1,0 +1,39 @@
+---
+const promises = [
+  'No registration',
+  'No email address',
+  'No credit card',
+  'No subscription',
+  'No analytics or tracking',
+  'No cloud, no servers',
+];
+---
+<section class="section privacy" id="privacy" aria-labelledby="privacy-title">
+  <div class="container privacy__inner">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">Privacy first</span>
+      <h2 class="h2" id="privacy-title">We don’t want your data. Really.</h2>
+      <p class="lede">MacScreen collects, stores and shares nothing about you, for analytics or any other purpose. Everything stays on your Macs, because that is the only place it needs to be.</p>
+    </div>
+    <ul class="chips" data-reveal>
+      {promises.map((p) => (
+        <li>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" /></svg>
+          {p}
+        </li>
+      ))}
+    </ul>
+    <p class="privacy__note" data-reveal>Download it, open it, use it. There is nothing to sign up for and nothing to hand over. Your screen, sound and pairing keys travel encrypted straight between your two Macs and never touch a server of ours, because we don’t run one. The code is open source, so you can verify every word of this yourself.</p>
+  </div>
+</section>
+
+<style>
+  .privacy { background: var(--accent-soft); }
+  .privacy__inner { max-width: 60rem; }
+  .chips { display: grid; gap: var(--space-3); grid-template-columns: 1fr; }
+  @media (min-width: 40rem) { .chips { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 64rem) { .chips { grid-template-columns: repeat(3, 1fr); } }
+  .chips li { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-5); border: 1px solid var(--border-strong); border-radius: var(--radius-m); background: var(--surface); font-weight: 600; }
+  .chips svg { flex: none; color: var(--accent); }
+  .privacy__note { margin-top: var(--space-6); color: var(--muted); max-width: 46rem; }
+</style>

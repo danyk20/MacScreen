@@ -15,6 +15,8 @@ virtual display, captures it, encodes it with the hardware video encoder and str
 network. The **Display** Mac decodes the stream and shows it full screen. Sound can optionally be
 sent the same way through a virtual audio device.
 
+**Private by design:** no registration, no email, no credit card, no subscription, and no data collected. See [Privacy](#privacy).
+
 Goal: a display that feels cabled. Wi-Fi first, Thunderbolt or Ethernet second.
 
 **Status:** beta (pre-release). Not notarized. Verified live on a 27-inch 5K iMac (Late 2015) as the Display and an
@@ -68,6 +70,18 @@ Details, signing identity behaviour and the audio driver are in [docs/USAGE.md](
    then click **Allow** on the Display.
 
 Full instructions, launch flags and troubleshooting: [docs/USAGE.md](docs/USAGE.md).
+
+## Privacy
+
+No registration. No email. No credit card. No subscription. Nothing collected.
+
+MacScreen does not collect, store or share any data about you for analytics or any other purpose. There is no
+telemetry, no analytics, no tracking, no account and no server run by this project. Your screen, audio and pairing
+keys go directly between your two Macs, encrypted, and stay on those devices. Everything you configure is saved only
+on your own Mac, and you can delete it at any time (see [docs/USAGE.md](docs/USAGE.md)).
+
+The one internet request is an optional update check that fetches the public release list from GitHub (GitHub
+sees the request like any web visit). You can turn it off in Settings, and the app then makes no internet requests.
 
 ## Documentation
 
